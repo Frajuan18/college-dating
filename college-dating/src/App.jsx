@@ -1,14 +1,17 @@
+// App.js - Main routing configuration
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import CoverPage from './components/CoverPage';
-import RegisterPage from './components/RegisterPage'; // You'll create this
+import Register from './components/Register';
+import Login from './components/Login';
 
 function App() {
   return (
     <Router>
       <Routes>
         <Route path="/" element={<CoverPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/login" element={<Login />} />
       </Routes>
     </Router>
   );
