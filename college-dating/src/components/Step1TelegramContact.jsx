@@ -44,16 +44,30 @@ const Step1TelegramContact = ({
     }
   }, [onTelegramShare, navigate]);
 
-  // For mobile - direct Telegram app link
+  // For mobile - use Telegram's OAuth
   const handleMobileLogin = () => {
     const botUsername = 'collegedatingbot';
     const redirectUrl = 'https://college-dating.vercel.app/register';
     
-    // Construct Telegram login URL
-    const telegramLoginUrl = `https://oauth.telegram.org/auth?bot_id=${botUsername}&origin=${encodeURIComponent(redirectUrl)}&return_to=${encodeURIComponent(redirectUrl)}&embed=1`;
+    // Correct Telegram OAuth URL format
+    const telegramLoginUrl = `https://oauth.telegram.org/auth?bot_id=${botUsername}&origin=${encodeURIComponent(window.location.origin)}&return_to=${encodeURIComponent(redirectUrl)}&embed=1`;
     
-    // Open in Telegram app if installed, otherwise in browser
-    window.location.href = telegramLoginUrl;
+    // Open in a new window for better mobile experience
+    window.open(telegramLoginUrl, '_blank', 'width=400,height=600');
+  };
+
+  // Alternative simpler mobile approach - use tg:// protocol
+  const handleMobileDeepLink = () => {
+    const botUsername = 'collegedatingbot';
+    const startParam = 'login';
+    
+    // Try to open Telegram app directly
+    window.location.href = `tg://resolve?domain=${botUsername}&start=${startParam}`;
+    
+    // Fallback to web if app not installed
+    setTimeout(() => {
+      window.location.href = `https://t.me/${botUsername}?start=${startParam}`;
+    }, 500);
   };
 
   // For desktop - use widget
@@ -66,6 +80,7 @@ const Step1TelegramContact = ({
       script.setAttribute('data-telegram-login', 'collegedatingbot');
       script.setAttribute('data-size', 'large');
       script.setAttribute('data-auth-url', 'https://college-dating.vercel.app/register');
+      script.setAttribute('data-request-access', 'read'); // Change to read instead of write
       script.async = true;
       
       script.onload = () => {
@@ -102,7 +117,7 @@ const Step1TelegramContact = ({
         </h2>
         <p className="text-white/70 mb-6">
           {isMobile 
-            ? "Tap the button below to login with Telegram" 
+            ? "Open Telegram to login" 
             : "Click the button below to login with Telegram"}
         </p>
       </div>
@@ -123,17 +138,30 @@ const Step1TelegramContact = ({
         />
       )}
 
-      {/* Mobile: Custom Button */}
+      {/* Mobile: Two Options */}
       {isMobile && (
-        <button
-          onClick={handleMobileLogin}
-          className="w-full bg-[#0088cc] text-white text-lg font-bold py-3 rounded-lg hover:scale-105 transition-transform duration-200 flex items-center justify-center gap-2"
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-1.892 8.915c-.14.646-.52.803-1.054.5l-2.915-2.148-1.41 1.356c-.156.156-.287.287-.588.287l.21-2.98 5.425-4.903c.236-.21-.052-.328-.366-.118l-6.71 4.225-2.887-.96c-.63-.196-.642-.63.13-.934l11.27-4.344c.525-.194.985.128.814.904z"/>
-          </svg>
-          Login with Telegram
-        </button>
+        <div className="space-y-3">
+          <button
+            onClick={handleMobileDeepLink}
+            className="w-full bg-[#0088cc] text-white text-lg font-bold py-3 rounded-lg hover:scale-105 transition-transform duration-200 flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-1.892 8.915c-.14.646-.52.803-1.054.5l-2.915-2.148-1.41 1.356c-.156.156-.287.287-.588.287l.21-2.98 5.425-4.903c.236-.21-.052-.328-.366-.118l-6.71 4.225-2.887-.96c-.63-.196-.642-.63.13-.934l11.27-4.344c.525-.194.985.128.814.904z"/>
+            </svg>
+            Open in Telegram App
+          </button>
+          
+          <button
+            onClick={handleMobileLogin}
+            className="w-full bg-white/10 border-2 border-white/30 text-white text-lg font-bold py-3 rounded-lg hover:bg-white/20 transition-all duration-200"
+          >
+            Continue in Browser
+          </button>
+          
+          <p className="text-white/50 text-xs text-center mt-2">
+            After authorizing, you'll be redirected back
+          </p>
+        </div>
       )}
 
       {!scriptLoaded && !isMobile && !scriptError && (
