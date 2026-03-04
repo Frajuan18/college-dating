@@ -1,6 +1,5 @@
 // api/telegram-webhook.js
 export default async function handler(req, res) {
-  // Set JSON headers
   res.setHeader('Content-Type', 'application/json');
   
   if (req.method !== 'POST') {
@@ -8,7 +7,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { callback_query, message } = req.body;
+    const { callback_query } = req.body;
     
     if (callback_query) {
       const { data, from, id, message: msg } = callback_query;
@@ -30,7 +29,7 @@ export default async function handler(req, res) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           callback_query_id: id,
-          text: actionData.action === 'verify' ? 'User verified!' : 'User rejected',
+          text: actionData.action === 'verify' ? '✅ User verified!' : '❌ User rejected',
           show_alert: false
         })
       });
@@ -42,7 +41,7 @@ export default async function handler(req, res) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: actionData.userId,
-            text: `✅ *Verification Approved!*\n\nCongratulations! Your student ID has been verified. You can now access all features of the app.\n\n[Open App](https://college-dating.vercel.app)`,
+            text: `✅ *Verification Approved!*\n\nCongratulations @${actionData.username}! Your student ID has been verified. You can now access all features of College Dating app.\n\n[Open App](https://college-dating.vercel.app)`,
             parse_mode: 'Markdown'
           })
         });
@@ -54,7 +53,7 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             chat_id: msg.chat.id,
             message_id: msg.message_id,
-            text: msg.text + '\n\n✅ *VERIFIED by* ' + from.first_name,
+            text: msg.text + `\n\n✅ *VERIFIED by* ${from.first_name}`,
             parse_mode: 'Markdown'
           })
         });
@@ -66,7 +65,7 @@ export default async function handler(req, res) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: actionData.userId,
-            text: `❌ *Verification Rejected*\n\nYour student ID verification was rejected. Please make sure your ID photo is clear and shows all required information.\n\n[Try Again](https://college-dating.vercel.app/register)`,
+            text: `❌ *Verification Rejected*\n\nHello @${actionData.username}, your student ID verification was rejected. Please make sure your ID photo is clear and shows all required information.\n\n[Try Again](https://college-dating.vercel.app/register)`,
             parse_mode: 'Markdown'
           })
         });
@@ -78,7 +77,7 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             chat_id: msg.chat.id,
             message_id: msg.message_id,
-            text: msg.text + '\n\n❌ *REJECTED by* ' + from.first_name,
+            text: msg.text + `\n\n❌ *REJECTED by* ${from.first_name}`,
             parse_mode: 'Markdown'
           })
         });
@@ -89,6 +88,6 @@ export default async function handler(req, res) {
     
   } catch (error) {
     console.error('Webhook error:', error);
-    res.status(200).json({ ok: true }); // Always return 200 to Telegram
+    res.status(200).json({ ok: true });
   }
 }
