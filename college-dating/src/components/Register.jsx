@@ -132,7 +132,7 @@ const Register = () => {
       //   body: JSON.stringify(completeRegistration)
       // })
       
-      navigate('/dashboard');
+      navigate('/home');
     }
   };
 

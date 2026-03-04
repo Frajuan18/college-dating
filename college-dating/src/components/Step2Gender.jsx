@@ -5,15 +5,9 @@ const Step2Gender = ({ formData, errors, handleChange, onNext, onBack }) => {
   const genderOptions = [
     { value: 'male', label: 'Male', icon: '♂️' },
     { value: 'female', label: 'Female', icon: '♀️' },
-    { value: 'non-binary', label: 'Non-binary', icon: '⚧' },
-    { value: 'prefer-not-to-say', label: 'Prefer not to say', icon: '🔒' }
   ];
 
-  const interestedOptions = [
-    { value: 'male', label: 'Men', icon: '♂️' },
-    { value: 'female', label: 'Women', icon: '♀️' },
-    { value: 'everyone', label: 'Everyone', icon: '👥' }
-  ];
+  
 
   return (
     <div className="space-y-6">
@@ -48,29 +42,7 @@ const Step2Gender = ({ formData, errors, handleChange, onNext, onBack }) => {
         {errors.gender && <p className="mt-2 text-sm text-pink-200">{errors.gender}</p>}
       </div>
 
-      <div>
-        <label className="block text-white font-medium mb-3 drop-shadow text-lg">
-          Interested in
-        </label>
-        <div className="grid grid-cols-3 gap-3">
-          {interestedOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => handleChange({ target: { name: 'interestedIn', value: option.value } })}
-              className={`p-4 rounded-xl border-2 transition-all ${
-                formData.interestedIn === option.value
-                  ? 'border-pink-200 bg-pink-200/20 text-white'
-                  : 'border-white/30 bg-white/5 text-white/70 hover:border-white/50'
-              }`}
-            >
-              <span className="text-2xl block mb-1">{option.icon}</span>
-              <span className="text-sm font-medium">{option.label}</span>
-            </button>
-          ))}
-        </div>
-        {errors.interestedIn && <p className="mt-2 text-sm text-pink-200">{errors.interestedIn}</p>}
-      </div>
+     
 
       <div className="flex gap-3 pt-4">
         <button
