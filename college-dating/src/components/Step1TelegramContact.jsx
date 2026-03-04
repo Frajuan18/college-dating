@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const TelegramConnectModal = ({ isOpen, onClose, onVerified }) => {
+const Step1TelegramContact = ({ isOpen, onClose, onVerified }) => {
   const [step, setStep] = useState('connect'); // connect | enter-code | verified
   const [verificationCode, setVerificationCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
@@ -120,4 +120,4 @@ const TelegramConnectModal = ({ isOpen, onClose, onVerified }) => {
   );
 };
 
-export default TelegramConnectModal;
+export default Step1TelegramContact;

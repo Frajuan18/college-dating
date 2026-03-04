@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import StepProgress from './StepProgress';
-import TelegramConnectModal from './Step1TelegramContact';
+import Step1TelegramContact from './Step1TelegramContact';
 import Step2Gender from './Step2Gender';
 import Step3UniversityId from './Step3UniversityId';
 
@@ -174,7 +174,7 @@ const Register = () => {
 
           {/* Step Components */}
           {step === 1 && (
-            <TelegramConnectModal
+            <Step1TelegramContact
               formData={formData}
               errors={errors}
               onTelegramShare={handleTelegramShare}
