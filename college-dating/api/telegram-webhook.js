@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       const BOT_TOKEN = '8684907265:AAGvjagNlpGA5tsJaYlW_wZBSViWs6sPzKg';
       const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-      // Answer callback query (removes loading state on button)
+      // Answer callback query
       await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,6 +34,11 @@ export default async function handler(req, res) {
         })
       });
 
+      // Create a display name for the user
+      const userDisplay = actionData.username && actionData.username !== 'Not provided' 
+        ? `@${actionData.username}` 
+        : `User ID: ${actionData.userId}`;
+
       if (actionData.action === 'verify') {
         // Send success message to user
         await fetch(`${TELEGRAM_API}/sendMessage`, {
@@ -41,12 +46,12 @@ export default async function handler(req, res) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: actionData.userId,
-            text: `✅ *Verification Approved!*\n\nCongratulations @${actionData.username}! Your student ID has been verified. You can now access all features of College Dating app.\n\n[Open App](https://college-dating.vercel.app)`,
+            text: `✅ *Verification Approved!*\n\nCongratulations ${userDisplay}! Your student ID has been verified. You can now access all features of College Dating app.\n\n[Open App](https://college-dating.vercel.app)`,
             parse_mode: 'Markdown'
           })
         });
 
-        // Edit original admin message to show verified
+        // Edit original admin message
         await fetch(`${TELEGRAM_API}/editMessageText`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -65,12 +70,12 @@ export default async function handler(req, res) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: actionData.userId,
-            text: `❌ *Verification Rejected*\n\nHello @${actionData.username}, your student ID verification was rejected. Please make sure your ID photo is clear and shows all required information.\n\n[Try Again](https://college-dating.vercel.app/register)`,
+            text: `❌ *Verification Rejected*\n\nHello ${userDisplay}, your student ID verification was rejected. Please make sure your ID photo is clear and shows all required information.\n\n[Try Again](https://college-dating.vercel.app/register)`,
             parse_mode: 'Markdown'
           })
         });
 
-        // Edit original admin message to show rejected
+        // Edit original admin message
         await fetch(`${TELEGRAM_API}/editMessageText`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

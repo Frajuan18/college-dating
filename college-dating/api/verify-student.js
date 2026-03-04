@@ -23,11 +23,26 @@ export default async function handler(req, res) {
   }
 
   try {
-    console.log('Received verification request:', req.body);
+    console.log('API received:', req.body);
 
     const BOT_TOKEN = '8684907265:AAGvjagNlpGA5tsJaYlW_wZBSViWs6sPzKg';
     const ADMIN_ID = '8016243457'; // Your numeric ID
     
+    // Safely extract data with fallbacks
+    const {
+      telegramId = 'Not provided',
+      telegramUsername = 'Not provided',
+      firstName = '',
+      lastName = '',
+      universityName = '',
+      studentId = '',
+      graduationYear = '',
+      gender = ''
+    } = req.body;
+
+    // Create display name
+    const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Not provided';
+
     // Create inline keyboard for admin actions
     const inlineKeyboard = {
       inline_keyboard: [
@@ -36,16 +51,16 @@ export default async function handler(req, res) {
             text: '✅ Verify',
             callback_data: JSON.stringify({
               action: 'verify',
-              userId: req.body.telegramId || 'unknown',
-              username: req.body.telegramUsername || 'unknown'
+              userId: telegramId,
+              username: telegramUsername
             })
           },
           {
             text: '❌ Reject',
             callback_data: JSON.stringify({
               action: 'reject',
-              userId: req.body.telegramId || 'unknown',
-              username: req.body.telegramUsername || 'unknown'
+              userId: telegramId,
+              username: telegramUsername
             })
           }
         ]
@@ -55,16 +70,18 @@ export default async function handler(req, res) {
     const message = `
 🔔 *New Student Verification Request*
 
-👤 *Name:* ${req.body.firstName || ''} ${req.body.lastName || ''}
-📱 *Telegram:* @${req.body.telegramUsername || 'No username'}
-🆔 *Telegram ID:* ${req.body.telegramId || 'N/A'}
-🎓 *University:* ${req.body.universityName || ''}
-🆔 *Student ID:* ${req.body.studentId || ''}
-📅 *Graduation Year:* ${req.body.graduationYear || ''}
-⚥ *Gender:* ${req.body.gender || ''}
+👤 *Name:* ${fullName}
+📱 *Telegram Username:* @${telegramUsername}
+🆔 *Telegram ID:* \`${telegramId}\`
+🎓 *University:* ${universityName || 'Not provided'}
+🆔 *Student ID:* ${studentId || 'Not provided'}
+📅 *Graduation Year:* ${graduationYear || 'Not provided'}
+⚥ *Gender:* ${gender || 'Not provided'}
 
 Please verify this student by clicking one of the buttons below.
     `;
+
+    console.log('Sending to Telegram:', message);
 
     // Send message to admin
     const telegramResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -95,8 +112,9 @@ Please verify this student by clicking one of the buttons below.
       success: true,
       message: '✅ Verification request sent to admin! You will be notified once verified.',
       data: {
-        university: req.body.universityName,
-        studentId: req.body.studentId
+        university: universityName,
+        studentId: studentId,
+        telegramNotified: true
       }
     });
 
