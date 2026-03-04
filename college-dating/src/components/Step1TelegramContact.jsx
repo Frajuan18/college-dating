@@ -7,7 +7,7 @@ const Step1TelegramContact = ({
   onTelegramShare,
   onNext,
 }) => {
-  const [step, setStep] = useState('connect'); // connect, enter-code, verified
+  const [step, setStep] = useState('connect');
   const [verificationCode, setVerificationCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationError, setVerificationError] = useState('');
@@ -20,8 +20,8 @@ const Step1TelegramContact = ({
   };
 
   const handleVerifyCode = async () => {
-    if (!verificationCode || verificationCode.length < 4) {
-      setVerificationError('Please enter a valid verification code');
+    if (!verificationCode || verificationCode.length !== 6) {
+      setVerificationError('Please enter the 6-digit code');
       return;
     }
 
@@ -29,7 +29,6 @@ const Step1TelegramContact = ({
     setVerificationError('');
 
     try {
-      // Call your backend to verify the code
       const response = await fetch('/api/verify-telegram-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -42,7 +41,7 @@ const Step1TelegramContact = ({
         setStep('verified');
         onTelegramShare(data.user);
       } else {
-        setVerificationError('Invalid verification code. Please try again.');
+        setVerificationError('Invalid code. Please try again.');
       }
     } catch (error) {
       setVerificationError('Verification failed. Please try again.');
@@ -67,7 +66,7 @@ const Step1TelegramContact = ({
             Verify with Telegram
           </h2>
           <p className="text-white/70 mb-4">
-            Step 1: Open our bot and share your contact
+            Step 1: Open our bot and click "Share Contact"
           </p>
           
           <div className="bg-white/10 rounded-lg p-6 mb-4 border-2 border-white/20">
@@ -84,16 +83,10 @@ const Step1TelegramContact = ({
             </button>
             
             <div className="mt-4 p-4 bg-blue-500/20 rounded-lg">
-              <p className="text-blue-200 text-sm flex items-start gap-2">
-                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-                <span>
-                  <strong>How to verify:</strong><br/>
-                  1. Click "Share Contact" button in the bot<br/>
-                  2. You'll receive a verification code<br/>
-                  3. Enter the code on the next screen
-                </span>
+              <p className="text-blue-200 text-sm">
+                1. Click "Share Contact" in the bot<br/>
+                2. Get a 6-digit verification code<br/>
+                3. Enter the code below
               </p>
             </div>
           </div>
@@ -106,28 +99,21 @@ const Step1TelegramContact = ({
     return (
       <div className="space-y-6">
         <div className="text-center">
-          <div className="flex justify-center mb-6">
-            <div className="w-20 h-20 bg-[#0088cc] rounded-full flex items-center justify-center">
-              <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd" />
-              </svg>
-            </div>
-          </div>
-
           <h2 className="text-white text-2xl font-bold mb-2">
-            Enter Verification Code
+            Enter 6-Digit Code
           </h2>
           <p className="text-white/70 mb-6">
             Enter the code you received from the bot
           </p>
 
-          <div className="bg-white/10 rounded-lg p-6 mb-4">
+          <div className="bg-white/10 rounded-lg p-6">
             <input
               type="text"
               value={verificationCode}
-              onChange={(e) => setVerificationCode(e.target.value)}
-              placeholder="Enter code here"
-              className="w-full px-4 py-3 bg-white/10 border-2 border-white/30 text-white text-center text-lg rounded-lg focus:outline-none focus:border-pink-200 mb-4"
+              onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000"
+              maxLength="6"
+              className="w-full px-4 py-3 bg-white/10 border-2 border-white/30 text-white text-center text-2xl tracking-wider rounded-lg focus:outline-none focus:border-pink-200 mb-4"
             />
 
             {verificationError && (
@@ -136,7 +122,7 @@ const Step1TelegramContact = ({
 
             <button
               onClick={handleVerifyCode}
-              disabled={isVerifying}
+              disabled={isVerifying || verificationCode.length !== 6}
               className="w-full bg-white text-rose-600 text-lg font-bold py-3 rounded-lg hover:scale-105 transition-transform duration-200 disabled:opacity-50"
             >
               {isVerifying ? 'Verifying...' : 'Verify Code'}
@@ -144,21 +130,16 @@ const Step1TelegramContact = ({
 
             <button
               onClick={() => setStep('connect')}
-              className="w-full text-white/50 hover:text-white text-sm mt-3 transition"
+              className="w-full text-white/50 hover:text-white text-sm mt-3"
             >
               ← Back
             </button>
           </div>
-
-          <p className="text-white/50 text-xs">
-            Didn't get a code? Make sure you clicked "Share Contact" in the bot
-          </p>
         </div>
       </div>
     );
   }
 
-  // Verified step
   return (
     <div className="space-y-6">
       <div className="text-center">
@@ -170,42 +151,17 @@ const Step1TelegramContact = ({
           </div>
         </div>
 
-        <h2 className="text-white text-2xl font-bold mb-2">
+        <h2 className="text-white text-2xl font-bold mb-4">
           Verification Successful!
         </h2>
         
-        {formData.telegramData && (
-          <div className="bg-white/10 rounded-lg p-4 mb-4">
-            <div className="flex items-center gap-3">
-              {formData.telegramData.photo_url && (
-                <img src={formData.telegramData.photo_url} alt="Profile" className="w-12 h-12 rounded-full" />
-              )}
-              <div className="text-left">
-                <p className="text-white font-medium">
-                  {formData.telegramData.first_name} {formData.telegramData.last_name}
-                </p>
-                <p className="text-white/60 text-sm">
-                  @{formData.telegramData.username}
-                </p>
-                <p className="text-white/60 text-xs">
-                  {formData.telegramData.phone_number}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <p className="text-white/70 mb-6">
-          Your Telegram contact has been verified
-        </p>
+        <button
+          onClick={onNext}
+          className="w-full bg-white text-rose-600 text-lg font-bold py-3 rounded-lg hover:scale-105 transition-transform duration-200"
+        >
+          Continue to Next Step
+        </button>
       </div>
-
-      <button
-        onClick={onNext}
-        className="w-full bg-white text-rose-600 text-lg font-bold py-3 rounded-lg hover:scale-105 transition-transform duration-200"
-      >
-        Continue to Next Step
-      </button>
     </div>
   );
 };
