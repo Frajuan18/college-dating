@@ -1,74 +1,110 @@
 // api/verify-student.js
-import multer from 'multer';
-import { createReadStream } from 'fs';
-import FormData from 'form-data';
-import fetch from 'node-fetch';
-
-// Disable Next.js bodyParser for this route
 export const config = {
   api: {
-    bodyParser: false,
+    bodyParser: false, // Important for file uploads
   },
 };
 
-// Configure multer for memory storage
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-});
-
-// Helper function to run middleware
-function runMiddleware(req, res, fn) {
-  return new Promise((resolve, reject) => {
-    fn(req, res, (result) => {
-      if (result instanceof Error) {
-        return reject(result);
-      }
-      return resolve(result);
-    });
-  });
-}
-
-// api/verify-student.js
 export default async function handler(req, res) {
-  // 1. Essential: Set CORS headers so your frontend can talk to this API
+  // Set JSON headers FIRST
+  res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // 2. Handle the preflight OPTIONS request (browsers send this automatically)
+  // Handle preflight
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // 3. Ensure it's a POST request
+  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // 4. Your main logic goes here. Let's start with a simple success response
-    //    to confirm the function works at its most basic level.
-    console.log("API function started successfully!");
+    // Parse multipart form data manually
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
     
-    // You can log the body to see what's being sent from your form
-    console.log("Request body:", req.body);
+    // Convert buffer to string and parse simple fields
+    // This is a simplified version - for production use a library
+    const boundary = req.headers['content-type'].split('boundary=')[1];
+    const parts = buffer.toString().split(`--${boundary}`);
+    
+    // Extract form fields
+    const formData = {};
+    let fileData = null;
+    
+    parts.forEach(part => {
+      if (part.includes('Content-Disposition')) {
+        const nameMatch = part.match(/name="([^"]+)"/);
+        if (nameMatch) {
+          const name = nameMatch[1];
+          if (part.includes('filename')) {
+            // This is a file
+            const filenameMatch = part.match(/filename="([^"]+)"/);
+            const contentTypeMatch = part.match(/Content-Type: ([^\r\n]+)/);
+            
+            const fileContent = part.split('\r\n\r\n')[1]?.split('\r\n--')[0];
+            if (fileContent) {
+              fileData = {
+                filename: filenameMatch ? filenameMatch[1] : 'unknown',
+                contentType: contentTypeMatch ? contentTypeMatch[1] : 'application/octet-stream',
+                data: fileContent
+              };
+            }
+          } else {
+            // This is a text field
+            const value = part.split('\r\n\r\n')[1]?.split('\r\n--')[0];
+            if (value) {
+              formData[name] = value.trim();
+            }
+          }
+        }
+      }
+    });
 
-    // Respond with success
+    // Now send to Telegram
+    const BOT_TOKEN = '8684907265:AAGvjagNlpGA5tsJaYlW_wZBSViWs6sPzKg';
+    const ADMIN_ID = '@Fra_juan';
+    
+    const message = `
+🔔 *New Student Verification Request*
+
+👤 *User:* ${formData.firstName || ''} ${formData.lastName || ''}
+📱 *Telegram:* @${formData.telegramUsername || 'No username'}
+🎓 *University:* ${formData.universityName || ''}
+🆔 *Student ID:* ${formData.studentId || ''}
+📅 *Graduation Year:* ${formData.graduationYear || ''}
+⚥ *Gender:* ${formData.gender || ''}
+    `;
+
+    // Send to Telegram (you'll need to implement this part)
+    // For now, just log it
+    console.log('Sending to Telegram:', message);
+    console.log('File received:', fileData?.filename);
+
+    // ALWAYS return JSON
     return res.status(200).json({
       success: true,
-      message: "API function is working!",
-      dataReceived: req.body
+      message: 'Verification request received! Please wait for admin approval.',
+      data: {
+        university: formData.universityName,
+        studentId: formData.studentId,
+        fileReceived: !!fileData
+      }
     });
 
   } catch (error) {
-    // 5. Catch any errors and log them (they will appear in Vercel logs)
-    console.error("Error in API function:", error);
+    // ALWAYS return JSON, even on error
+    console.error('Error:', error);
     return res.status(500).json({
       success: false,
-      message: error.message || "An internal server error occurred."
+      message: 'Server error: ' + error.message
     });
   }
 }
