@@ -2,24 +2,34 @@
 app.post('/api/verify-telegram-code', (req, res) => {
   const { code } = req.body;
   
-  // In production, you'd check this against your database
-  // This is a mock implementation
-  const mockVerification = {
-    'abc123': {
-      id: 123456789,
-      first_name: 'John',
-      last_name: 'Doe',
-      username: 'johndoe',
-      phone_number: '+1234567890',
-      verified: true
-    }
-  };
-
-  const user = mockVerification[code];
+  console.log('Verifying code:', code);
   
-  if (user) {
-    res.json({ verified: true, user });
+  // Check if code exists
+  if (users[code]) {
+    const userData = users[code];
+    
+    // Return user data
+    res.json({
+      verified: true,
+      user: userData.user
+    });
+    
+    // Optional: Delete after successful verification
+    delete users[code];
+    
   } else {
-    res.json({ verified: false });
+    res.json({
+      verified: false,
+      error: 'Invalid or expired code'
+    });
   }
+});
+
+// Optional: Check if code is valid without consuming
+app.get('/api/check-code/:code', (req, res) => {
+  const { code } = req.params;
+  
+  res.json({
+    valid: !!users[code]
+  });
 });
