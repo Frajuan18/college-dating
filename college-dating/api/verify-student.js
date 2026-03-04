@@ -1,7 +1,7 @@
 // api/verify-student.js
 export const config = {
   api: {
-    bodyParser: true,
+    bodyParser: false, // Must be false for FormData
   },
 };
 
@@ -23,7 +23,41 @@ export default async function handler(req, res) {
   }
 
   try {
-    console.log('API received:', req.body);
+    // Parse the multipart form data
+    const formData = await new Promise((resolve, reject) => {
+      const chunks = [];
+      req.on('data', chunk => chunks.push(chunk));
+      req.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        const boundary = req.headers['content-type']?.split('boundary=')[1];
+        
+        if (!boundary) {
+          reject(new Error('No boundary found'));
+          return;
+        }
+
+        const parts = buffer.toString().split(`--${boundary}`);
+        const result = {};
+
+        parts.forEach(part => {
+          const nameMatch = part.match(/name="([^"]+)"/);
+          if (nameMatch) {
+            const name = nameMatch[1];
+            // Get the value (skip headers)
+            const valueMatch = part.split('\r\n\r\n')[1];
+            if (valueMatch) {
+              const value = valueMatch.split('\r\n--')[0];
+              result[name] = value.trim();
+            }
+          }
+        });
+
+        resolve(result);
+      });
+      req.on('error', reject);
+    });
+
+    console.log('Parsed form data:', formData);
 
     const BOT_TOKEN = '8684907265:AAGvjagNlpGA5tsJaYlW_wZBSViWs6sPzKg';
     const ADMIN_ID = '8016243457'; // Your numeric ID
@@ -38,7 +72,7 @@ export default async function handler(req, res) {
       studentId = '',
       graduationYear = '',
       gender = ''
-    } = req.body;
+    } = formData;
 
     // Create display name
     const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Not provided';
@@ -99,7 +133,6 @@ Please verify this student by clicking one of the buttons below.
     console.log('Telegram API response:', telegramResult);
 
     if (!telegramResult.ok) {
-      // Return partial success but inform about Telegram issue
       return res.status(200).json({
         success: true,
         message: 'Your request was received, but admin notification failed. Please try again or contact support.',
