@@ -10,7 +10,7 @@ const Step3UniversityId = ({
   onBack 
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState(null); // 'success' or 'error'
+  const [submitStatus, setSubmitStatus] = useState(null);
   const [submitMessage, setSubmitMessage] = useState('');
 
   const handleFormSubmit = async (e) => {
@@ -20,44 +20,42 @@ const Step3UniversityId = ({
     setSubmitMessage('');
 
     try {
-      // Create form data to send files
-      const submissionData = new FormData();
-      submissionData.append('telegramId', formData.telegramData?.id);
-      submissionData.append('telegramUsername', formData.telegramData?.username);
-      submissionData.append('firstName', formData.telegramData?.first_name);
-      submissionData.append('lastName', formData.telegramData?.last_name);
-      submissionData.append('universityName', formData.universityName);
-      submissionData.append('studentId', formData.studentId);
-      submissionData.append('graduationYear', formData.graduationYear);
-      submissionData.append('gender', formData.gender);
+      // Create FormData for file upload
+      const formDataToSend = new FormData();
       
-      // Append the ID photo
+      // Append all text fields
+      formDataToSend.append('telegramId', formData.telegramData?.id || '');
+      formDataToSend.append('telegramUsername', formData.telegramData?.username || '');
+      formDataToSend.append('firstName', formData.telegramData?.first_name || '');
+      formDataToSend.append('lastName', formData.telegramData?.last_name || '');
+      formDataToSend.append('universityName', formData.universityName);
+      formDataToSend.append('studentId', formData.studentId);
+      formDataToSend.append('graduationYear', formData.graduationYear);
+      formDataToSend.append('gender', formData.gender);
+      
+      // Append the file if it exists
       if (formData.idPhoto) {
-        submissionData.append('idPhoto', formData.idPhoto);
+        formDataToSend.append('idPhoto', formData.idPhoto);
       }
 
-      // Send to your backend
+      // Send to your API
       const response = await fetch('/api/verify-student', {
         method: 'POST',
-        body: submissionData
+        body: formDataToSend,
+        // Don't set Content-Type header - browser will set it with boundary
       });
 
       const data = await response.json();
 
       if (response.ok) {
         setSubmitStatus('success');
-        setSubmitMessage('Your documents have been sent for verification. You will be notified once approved.');
-        
-        // Don't navigate away immediately - show success message
-        setTimeout(() => {
-          // Optionally redirect to a waiting page
-          // navigate('/verification-pending');
-        }, 5000);
+        setSubmitMessage(data.message || 'Verification request sent successfully!');
       } else {
         setSubmitStatus('error');
         setSubmitMessage(data.message || 'Failed to submit verification. Please try again.');
       }
     } catch (error) {
+      console.error('Submission error:', error);
       setSubmitStatus('error');
       setSubmitMessage('Network error. Please check your connection and try again.');
     } finally {
@@ -84,12 +82,26 @@ const Step3UniversityId = ({
           <p className="text-green-300/70 text-sm mt-2">
             You'll receive a notification once your account is verified.
           </p>
+          <button
+            type="button"
+            onClick={() => window.location.href = '/'}
+            className="mt-4 bg-white text-rose-600 px-6 py-2 rounded-lg font-semibold hover:bg-rose-50 transition"
+          >
+            Go to Home
+          </button>
         </div>
       )}
 
       {submitStatus === 'error' && (
         <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4">
           <p className="text-red-200 text-center">{submitMessage}</p>
+          <button
+            type="button"
+            onClick={() => setSubmitStatus(null)}
+            className="mt-2 text-red-200 text-sm underline hover:text-white"
+          >
+            Try Again
+          </button>
         </div>
       )}
 
@@ -106,6 +118,7 @@ const Step3UniversityId = ({
               className="w-full px-4 py-2.5 rounded-lg bg-white/10 border-2 border-white/30 text-white placeholder-white/50 focus:outline-none focus:border-pink-200 transition"
               placeholder="e.g., Stanford University"
               disabled={isSubmitting}
+              required
             />
             {errors.universityName && <p className="mt-1 text-sm text-pink-200">{errors.universityName}</p>}
           </div>
@@ -120,6 +133,7 @@ const Step3UniversityId = ({
               className="w-full px-4 py-2.5 rounded-lg bg-white/10 border-2 border-white/30 text-white placeholder-white/50 focus:outline-none focus:border-pink-200 transition"
               placeholder="Enter your student ID"
               disabled={isSubmitting}
+              required
             />
             {errors.studentId && <p className="mt-1 text-sm text-pink-200">{errors.studentId}</p>}
           </div>
@@ -132,10 +146,11 @@ const Step3UniversityId = ({
               onChange={handleChange}
               className="w-full px-4 py-2.5 rounded-lg bg-white/10 border-2 border-white/30 text-white [color-scheme:dark] focus:outline-none focus:border-pink-200 transition"
               disabled={isSubmitting}
+              required
             >
-              <option value="" className="bg-rose-900">Select year</option>
+              <option value="">Select year</option>
               {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map(year => (
-                <option key={year} value={year} className="bg-rose-900">{year}</option>
+                <option key={year} value={year}>{year}</option>
               ))}
             </select>
             {errors.graduationYear && <p className="mt-1 text-sm text-pink-200">{errors.graduationYear}</p>}
@@ -151,6 +166,7 @@ const Step3UniversityId = ({
                 className="hidden"
                 id="idPhoto"
                 disabled={isSubmitting}
+                required
               />
               <label htmlFor="idPhoto" className="cursor-pointer block">
                 {formData.idPhoto ? (
@@ -209,19 +225,6 @@ const Step3UniversityId = ({
             </button>
           </div>
         </>
-      )}
-
-      {/* Show a waiting message if already submitted */}
-      {submitStatus === 'success' && (
-        <div className="text-center pt-4">
-          <button
-            type="button"
-            onClick={() => window.location.href = '/dashboard'}
-            className="bg-white text-rose-600 px-8 py-3 rounded-lg font-semibold hover:bg-rose-50 transition"
-          >
-            Go to Dashboard
-          </button>
-        </div>
       )}
     </form>
   );
