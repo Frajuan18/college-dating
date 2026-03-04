@@ -7,8 +7,6 @@ const Step2Gender = ({ formData, errors, handleChange, onNext, onBack }) => {
     { value: 'female', label: 'Female', icon: '♀️' },
   ];
 
-  
-
   return (
     <div className="space-y-6">
       <div className="text-center mb-4">
@@ -18,6 +16,7 @@ const Step2Gender = ({ formData, errors, handleChange, onNext, onBack }) => {
         </p>
       </div>
 
+      {/* I am - Gender Selection */}
       <div>
         <label className="block text-white font-medium mb-3 drop-shadow text-lg">
           I am
@@ -41,8 +40,6 @@ const Step2Gender = ({ formData, errors, handleChange, onNext, onBack }) => {
         </div>
         {errors.gender && <p className="mt-2 text-sm text-pink-200">{errors.gender}</p>}
       </div>
-
-     
 
       <div className="flex gap-3 pt-4">
         <button
