@@ -1,7 +1,7 @@
 // api/verify-student.js
 export const config = {
   api: {
-    bodyParser: false, // Must be false for FormData
+    bodyParser: false,
   },
 };
 
@@ -60,7 +60,7 @@ export default async function handler(req, res) {
     console.log('Parsed form data:', formData);
 
     const BOT_TOKEN = '8684907265:AAGvjagNlpGA5tsJaYlW_wZBSViWs6sPzKg';
-    const ADMIN_ID = '8016243457'; // Your numeric ID
+    const ADMIN_ID = '8016243457'; // Your numeric ID - WORKS!
     
     // Safely extract data with fallbacks
     const {
@@ -101,28 +101,26 @@ export default async function handler(req, res) {
       ]
     };
 
-    const message = `
-🔔 *New Student Verification Request*
+    const message = `🔔 *New Student Verification Request*
 
 👤 *Name:* ${fullName}
-📱 *Telegram Username:* @${telegramUsername}
+📱 *Telegram:* @${telegramUsername}
 🆔 *Telegram ID:* \`${telegramId}\`
 🎓 *University:* ${universityName || 'Not provided'}
 🆔 *Student ID:* ${studentId || 'Not provided'}
 📅 *Graduation Year:* ${graduationYear || 'Not provided'}
 ⚥ *Gender:* ${gender || 'Not provided'}
 
-Please verify this student by clicking one of the buttons below.
-    `;
+Please verify this student by clicking one of the buttons below.`;
 
     console.log('Sending to Telegram:', message);
 
-    // Send message to admin
+    // Send message to admin - USING EXACT SAME FORMAT AS TEST
     const telegramResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: ADMIN_ID,
+        chat_id: ADMIN_ID, // 8016243457 - same as test
         text: message,
         parse_mode: 'Markdown',
         reply_markup: inlineKeyboard
@@ -135,8 +133,8 @@ Please verify this student by clicking one of the buttons below.
     if (!telegramResult.ok) {
       return res.status(200).json({
         success: true,
-        message: 'Your request was received, but admin notification failed. Please try again or contact support.',
-        telegramError: telegramResult.description
+        message: 'Request received but Telegram notification failed',
+        error: telegramResult.description
       });
     }
 
@@ -146,8 +144,7 @@ Please verify this student by clicking one of the buttons below.
       message: '✅ Verification request sent to admin! You will be notified once verified.',
       data: {
         university: universityName,
-        studentId: studentId,
-        telegramNotified: true
+        studentId: studentId
       }
     });
 
