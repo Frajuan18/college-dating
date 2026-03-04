@@ -11,10 +11,20 @@ const Step1TelegramContact = ({
   const telegramContainerRef = useRef(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [scriptError, setScriptError] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
 
+  // Detect if user is on mobile
   useEffect(() => {
-    // Check URL for Telegram callback data
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+      return /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+    };
+    setIsMobile(checkMobile());
+  }, []);
+
+  useEffect(() => {
+    // Check URL for Telegram callback data (for desktop redirect method)
     const urlParams = new URLSearchParams(window.location.search);
     
     if (urlParams.has('id')) {
@@ -29,17 +39,26 @@ const Step1TelegramContact = ({
       };
       
       console.log('Telegram user data received:', tgData);
-      
-      // Send data to parent component
       onTelegramShare(tgData);
-      
-      // Clean URL by removing query parameters
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [onTelegramShare, navigate]);
 
+  // For mobile - direct Telegram app link
+  const handleMobileLogin = () => {
+    const botUsername = 'collegedatingbot';
+    const redirectUrl = 'https://college-dating.vercel.app/register';
+    
+    // Construct Telegram login URL
+    const telegramLoginUrl = `https://oauth.telegram.org/auth?bot_id=${botUsername}&origin=${encodeURIComponent(redirectUrl)}&return_to=${encodeURIComponent(redirectUrl)}&embed=1`;
+    
+    // Open in Telegram app if installed, otherwise in browser
+    window.location.href = telegramLoginUrl;
+  };
+
+  // For desktop - use widget
   useEffect(() => {
-    if (telegramContainerRef.current) {
+    if (!isMobile && telegramContainerRef.current) {
       telegramContainerRef.current.innerHTML = '';
       
       const script = document.createElement('script');
@@ -47,7 +66,6 @@ const Step1TelegramContact = ({
       script.setAttribute('data-telegram-login', 'collegedatingbot');
       script.setAttribute('data-size', 'large');
       script.setAttribute('data-auth-url', 'https://college-dating.vercel.app/register');
-      script.setAttribute('data-request-access', 'write');
       script.async = true;
       
       script.onload = () => {
@@ -62,7 +80,7 @@ const Step1TelegramContact = ({
       
       telegramContainerRef.current.appendChild(script);
     }
-  }, []);
+  }, [isMobile]);
 
   return (
     <div className="space-y-6">
@@ -83,11 +101,13 @@ const Step1TelegramContact = ({
           Connect with Telegram
         </h2>
         <p className="text-white/70 mb-6">
-          Click the button below to login with Telegram
+          {isMobile 
+            ? "Tap the button below to login with Telegram" 
+            : "Click the button below to login with Telegram"}
         </p>
       </div>
 
-      {scriptError && (
+      {scriptError && !isMobile && (
         <div className="p-4 bg-red-500/20 border border-red-500/30 rounded-lg">
           <p className="text-red-200 text-sm text-center">
             Failed to load Telegram login. Please refresh.
@@ -95,13 +115,28 @@ const Step1TelegramContact = ({
         </div>
       )}
 
-      {/* Telegram Login Widget Container */}
-      <div 
-        ref={telegramContainerRef}
-        className="flex justify-center min-h-[60px]"
-      />
+      {/* Desktop: Telegram Widget */}
+      {!isMobile && (
+        <div 
+          ref={telegramContainerRef}
+          className="flex justify-center min-h-[60px]"
+        />
+      )}
 
-      {!scriptLoaded && !scriptError && (
+      {/* Mobile: Custom Button */}
+      {isMobile && (
+        <button
+          onClick={handleMobileLogin}
+          className="w-full bg-[#0088cc] text-white text-lg font-bold py-3 rounded-lg hover:scale-105 transition-transform duration-200 flex items-center justify-center gap-2"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-1.892 8.915c-.14.646-.52.803-1.054.5l-2.915-2.148-1.41 1.356c-.156.156-.287.287-.588.287l.21-2.98 5.425-4.903c.236-.21-.052-.328-.366-.118l-6.71 4.225-2.887-.96c-.63-.196-.642-.63.13-.934l11.27-4.344c.525-.194.985.128.814.904z"/>
+          </svg>
+          Login with Telegram
+        </button>
+      )}
+
+      {!scriptLoaded && !isMobile && !scriptError && (
         <div className="flex justify-center py-2">
           <div className="text-white/50 text-sm animate-pulse">Loading Telegram login...</div>
         </div>
@@ -142,7 +177,6 @@ const Step1TelegramContact = ({
         </p>
       )}
 
-      {/* Continue button - enabled only after Telegram data is received */}
       <button
         onClick={onNext}
         disabled={!formData.telegramData}
@@ -154,6 +188,10 @@ const Step1TelegramContact = ({
       >
         Continue to Next Step
       </button>
+
+      <p className="text-white/50 text-xs text-center">
+        We only access your basic profile information
+      </p>
     </div>
   );
 };
