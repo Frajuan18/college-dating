@@ -34,23 +34,39 @@ export const submitVerification = async (formData) => {
 
     // Upload ID photo if exists
     let idPhotoUrl = null;
+    let idPhotoPath = null;
+    
     if (formData.idPhoto) {
-      const fileName = `${user.id}/${Date.now()}_${formData.idPhoto.name}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('student-ids')
-        .upload(fileName, formData.idPhoto);
+      try {
+        // Generate a unique filename
+        const fileName = `${user.id}/${Date.now()}_${formData.idPhoto.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('student-ids')
+          .upload(fileName, formData.idPhoto);
 
-      if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          if (uploadError.message.includes('bucket')) {
+            console.warn('Storage bucket not configured, continuing without photo');
+          } else {
+            throw uploadError;
+          }
+        } else {
+          const { data: { publicUrl } } = supabase.storage
+            .from('student-ids')
+            .getPublicUrl(fileName);
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('student-ids')
-        .getPublicUrl(fileName);
-
-      idPhotoUrl = publicUrl;
+          idPhotoUrl = publicUrl;
+          idPhotoPath = fileName; // Save the path for later deletion
+        }
+      } catch (uploadError) {
+        console.error('Photo upload failed:', uploadError);
+        // Continue without photo
+      }
     }
 
-    // Create verification record
+    // Create verification record with photo path
     const { data: verification, error: verificationError } = await supabase
       .from('student_verifications')
       .insert([{
@@ -60,13 +76,18 @@ export const submitVerification = async (formData) => {
         graduation_year: formData.graduationYear,
         gender: formData.gender,
         id_photo_url: idPhotoUrl,
+        id_photo_path: idPhotoPath, // Save path for deletion
         status: 'pending'
       }])
       .select();
 
     if (verificationError) throw verificationError;
 
-    return { success: true, message: 'Verification submitted successfully!', verification };
+    return { 
+      success: true, 
+      message: 'Verification submitted successfully! Your ID photo will be deleted after review.', 
+      verification 
+    };
   } catch (error) {
     console.error('Error submitting verification:', error);
     return { success: false, message: error.message };

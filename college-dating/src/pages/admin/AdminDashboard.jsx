@@ -1,7 +1,7 @@
 // src/pages/admin/dashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import ProtectedRoute from '../../components/ProtectedRoute.jsx';
+import ProtectedRoute from '../../components/ProtectedRoute';
 
 const AdminDashboard = () => {
   const [verifications, setVerifications] = useState([]);
@@ -41,20 +41,57 @@ const AdminDashboard = () => {
   const handleVerification = async (id, status) => {
     const { data: { user } } = await supabase.auth.getUser();
     
-    const { error } = await supabase
-      .from('student_verifications')
-      .update({
-        status,
-        admin_notes: adminNotes,
-        reviewed_by: user?.id,
-        reviewed_at: new Date().toISOString()
-      })
-      .eq('id', id);
+    try {
+      // First, get the verification record to get the photo path
+      const { data: verification, error: fetchError } = await supabase
+        .from('student_verifications')
+        .select('id_photo_url, id_photo_path')
+        .eq('id', id)
+        .single();
 
-    if (!error) {
+      if (fetchError) throw fetchError;
+
+      // Update verification status
+      const { error: updateError } = await supabase
+        .from('student_verifications')
+        .update({
+          status,
+          admin_notes: adminNotes,
+          reviewed_by: user.id,
+          reviewed_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      // If verification is complete (approved or rejected), delete the photo
+      if (status === 'approved' || status === 'rejected') {
+        if (verification?.id_photo_path) {
+          // Delete the image from storage
+          const { error: deleteError } = await supabase.storage
+            .from('student-ids')
+            .remove([verification.id_photo_path]);
+          
+          if (deleteError) {
+            console.error('Error deleting image:', deleteError);
+          } else {
+            console.log('Image deleted successfully');
+            
+            // Update the record to remove the URL and path
+            await supabase
+              .from('student_verifications')
+              .update({ id_photo_url: null, id_photo_path: null })
+              .eq('id', id);
+          }
+        }
+      }
+      
       setSelectedVerification(null);
       setAdminNotes('');
       fetchVerifications();
+    } catch (error) {
+      console.error('Error in verification:', error);
+      alert('Error processing verification');
     }
   };
 
@@ -167,8 +204,8 @@ const AdminDashboard = () => {
 
         {/* Review Modal */}
         {selectedVerification && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white max-w-2xl w-full p-6 border border-gray-200">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white max-w-2xl w-full p-6 border border-gray-200 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-light text-gray-900">REVIEW VERIFICATION</h2>
                 <button
@@ -206,6 +243,14 @@ const AdminDashboard = () => {
                       <p className="text-xs text-gray-500 uppercase tracking-wider">Gender</p>
                       <p className="text-gray-900 capitalize">{selectedVerification.gender}</p>
                     </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Submitted</p>
+                      <p className="text-gray-900">{new Date(selectedVerification.submitted_at).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Status</p>
+                      <p className="text-gray-900 capitalize">{selectedVerification.status}</p>
+                    </div>
                   </div>
                 </div>
 
@@ -217,6 +262,9 @@ const AdminDashboard = () => {
                       alt="Student ID"
                       className="max-w-full h-auto border border-gray-200"
                     />
+                    <p className="text-xs text-gray-400 mt-2">
+                      This image will be automatically deleted after verification
+                    </p>
                   </div>
                 )}
 
@@ -238,13 +286,13 @@ const AdminDashboard = () => {
                     onClick={() => handleVerification(selectedVerification.id, 'approved')}
                     className="flex-1 bg-gray-900 text-white text-sm font-medium py-3 hover:bg-gray-800 transition-colors"
                   >
-                    APPROVE
+                    APPROVE & DELETE IMAGE
                   </button>
                   <button
                     onClick={() => handleVerification(selectedVerification.id, 'rejected')}
                     className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-3 hover:bg-gray-50 transition-colors"
                   >
-                    REJECT
+                    REJECT & DELETE IMAGE
                   </button>
                 </div>
               </div>
