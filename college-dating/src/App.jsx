@@ -5,6 +5,8 @@ import CoverPage from './components/CoverPage';
 import Register from './components/Register';
 import Login from './components/Login';
 import Home from './pages/Home';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminLogin from './pages/admin/login';
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
         <Route path="/home" element={<Home />} />
+        <Route path="/admin/login" element={<AdminLogin/>} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
       </Routes>
     </Router>
   );
