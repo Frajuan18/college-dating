@@ -7,8 +7,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { callback_query } = req.body;
+    const { callback_query, message } = req.body;
     
+    // Handle callback queries (button clicks)
     if (callback_query) {
       const { data, from, id, message: msg } = callback_query;
       
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
       const BOT_TOKEN = '8684907265:AAGvjagNlpGA5tsJaYlW_wZBSViWs6sPzKg';
       const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-      // Answer callback query
+      // Answer callback query (removes loading state)
       await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,10 +35,10 @@ export default async function handler(req, res) {
         })
       });
 
-      // Create a display name for the user
+      // Create display name for user
       const userDisplay = actionData.username && actionData.username !== 'Not provided' 
         ? `@${actionData.username}` 
-        : `User ID: ${actionData.userId}`;
+        : `${actionData.name || `User ID: ${actionData.userId}`}`;
 
       if (actionData.action === 'verify') {
         // Send success message to user
@@ -47,9 +48,13 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             chat_id: actionData.userId,
             text: `✅ *Verification Approved!*\n\nCongratulations ${userDisplay}! Your student ID has been verified. You can now access all features of College Dating app.\n\n[Open App](https://college-dating.vercel.app)`,
-            parse_mode: 'Markdown'
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true
           })
         });
+
+        // Here you would update your database to mark user as verified
+        // await updateUserVerificationStatus(actionData.userId, true);
 
         // Edit original admin message
         await fetch(`${TELEGRAM_API}/editMessageText`, {
@@ -58,8 +63,19 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             chat_id: msg.chat.id,
             message_id: msg.message_id,
-            text: msg.text + `\n\n✅ *VERIFIED by* ${from.first_name}`,
+            text: msg.text + `\n\n✅ *VERIFIED by* ${from.first_name} ${from.last_name || ''} (${from.username ? '@' + from.username : from.id})`,
             parse_mode: 'Markdown'
+          })
+        });
+
+        // Remove the inline keyboard
+        await fetch(`${TELEGRAM_API}/editMessageReplyMarkup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: msg.chat.id,
+            message_id: msg.message_id,
+            reply_markup: { inline_keyboard: [] }
           })
         });
 
@@ -71,7 +87,8 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             chat_id: actionData.userId,
             text: `❌ *Verification Rejected*\n\nHello ${userDisplay}, your student ID verification was rejected. Please make sure your ID photo is clear and shows all required information.\n\n[Try Again](https://college-dating.vercel.app/register)`,
-            parse_mode: 'Markdown'
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true
           })
         });
 
@@ -82,8 +99,19 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             chat_id: msg.chat.id,
             message_id: msg.message_id,
-            text: msg.text + `\n\n❌ *REJECTED by* ${from.first_name}`,
+            text: msg.text + `\n\n❌ *REJECTED by* ${from.first_name} ${from.last_name || ''} (${from.username ? '@' + from.username : from.id})`,
             parse_mode: 'Markdown'
+          })
+        });
+
+        // Remove the inline keyboard
+        await fetch(`${TELEGRAM_API}/editMessageReplyMarkup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: msg.chat.id,
+            message_id: msg.message_id,
+            reply_markup: { inline_keyboard: [] }
           })
         });
       }
@@ -93,6 +121,6 @@ export default async function handler(req, res) {
     
   } catch (error) {
     console.error('Webhook error:', error);
-    res.status(200).json({ ok: true });
+    res.status(200).json({ ok: true }); // Always return 200 to Telegram
   }
 }
