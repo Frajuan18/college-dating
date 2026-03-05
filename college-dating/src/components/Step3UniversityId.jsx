@@ -1,5 +1,5 @@
 // components/Step3UniversityId.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 const Step3UniversityId = ({
@@ -13,6 +13,64 @@ const Step3UniversityId = ({
   const [submitStatus, setSubmitStatus] = useState(null);
   const [submitMessage, setSubmitMessage] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [verificationStatus, setVerificationStatus] = useState(null);
+  const [checkingStatus, setCheckingStatus] = useState(true);
+
+  // Check if user already has a verification status
+  useEffect(() => {
+    checkUserVerificationStatus();
+  }, []);
+
+  const checkUserVerificationStatus = async () => {
+    try {
+      const telegramData = formData.telegramData || {};
+      const telegramId = telegramData.id || formData.telegramId;
+      
+      if (!telegramId) {
+        setCheckingStatus(false);
+        return;
+      }
+
+      // Check if user exists
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .maybeSingle();
+
+      if (userError) throw userError;
+
+      if (user) {
+        // Check if user has any verifications
+        const { data: verifications, error: verifError } = await supabase
+          .from('student_verifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('submitted_at', { ascending: false })
+          .limit(1);
+
+        if (verifError) throw verifError;
+
+        if (verifications && verifications.length > 0) {
+          const latestVerification = verifications[0];
+          setVerificationStatus(latestVerification.status);
+
+          // If already approved, redirect to home
+          if (latestVerification.status === 'approved') {
+            setTimeout(() => {
+              window.location.href = "/home";
+            }, 2000);
+          }
+          // If rejected, show message but don't redirect automatically
+          // User can try again
+        }
+      }
+    } catch (error) {
+      console.error("Error checking status:", error);
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
@@ -147,13 +205,10 @@ const Step3UniversityId = ({
       setUploadProgress(100);
 
       console.log("Verification created:", verification);
-
-      setSubmitStatus("success");
-      setSubmitMessage("Verification submitted successfully! Your ID will be reviewed by admin.");
-
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 3000);
+      
+      setVerificationStatus('pending');
+      setSubmitStatus("pending");
+      setSubmitMessage("Your verification has been submitted and is pending admin review.");
 
     } catch (error) {
       console.error("Submission error:", error);
@@ -186,6 +241,122 @@ const Step3UniversityId = ({
     }
   };
 
+  // Show loading while checking status
+  if (checkingStatus) {
+    return (
+      <div className="text-center py-12">
+        <div className="inline-block h-8 w-8 border-4 border-pink-200 border-t-transparent animate-spin rounded-full"></div>
+        <p className="text-white mt-4">Checking verification status...</p>
+      </div>
+    );
+  }
+
+  // Show pending status
+  if (verificationStatus === 'pending' || submitStatus === 'pending') {
+    return (
+      <div className="space-y-5 text-center">
+        <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-8">
+          <svg
+            className="w-16 h-16 text-yellow-400 mx-auto mb-4"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+          >
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <h2 className="text-2xl font-bold text-white mb-2">Verification Pending</h2>
+          <p className="text-yellow-200 mb-4">
+            {submitMessage || "Your verification is currently being reviewed by our admin team."}
+          </p>
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 max-w-md mx-auto">
+            <p className="text-yellow-100 text-sm">
+              <strong>What happens next?</strong><br />
+              • An admin will review your university ID<br />
+              • You'll be notified once the review is complete<br />
+              • This usually takes 24-48 hours<br />
+              • You can close this page and check back later
+            </p>
+          </div>
+          <button
+            onClick={() => window.location.href = "/"}
+            className="mt-6 bg-white text-yellow-600 px-6 py-2 rounded-lg font-medium hover:bg-yellow-50 transition"
+          >
+            Return to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show approved status
+  if (verificationStatus === 'approved') {
+    return (
+      <div className="space-y-5 text-center">
+        <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-8">
+          <svg
+            className="w-16 h-16 text-green-400 mx-auto mb-4"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+          >
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <h2 className="text-2xl font-bold text-white mb-2">Verification Approved!</h2>
+          <p className="text-green-200 mb-4">
+            Your student status has been verified successfully.
+          </p>
+          <p className="text-green-300 text-sm mb-6">
+            Redirecting you to the home page...
+          </p>
+          <div className="w-full bg-white/20 rounded-full h-2 max-w-md mx-auto">
+            <div className="bg-green-400 h-2 rounded-full animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show rejected status
+  if (verificationStatus === 'rejected') {
+    return (
+      <div className="space-y-5">
+        <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-8 text-center">
+          <svg
+            className="w-16 h-16 text-red-400 mx-auto mb-4"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+          >
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <h2 className="text-2xl font-bold text-white mb-2">Verification Rejected</h2>
+          <p className="text-red-200 mb-4">
+            Your verification was not approved. Please try again with a clearer photo.
+          </p>
+          <button
+            onClick={() => {
+              setVerificationStatus(null);
+              setSubmitStatus(null);
+            }}
+            className="bg-white text-red-600 px-6 py-2 rounded-lg font-medium hover:bg-red-50 transition"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show the form (default state)
   return (
     <form onSubmit={handleFormSubmit} className="space-y-5">
       <div className="text-center mb-2">
@@ -213,7 +384,7 @@ const Step3UniversityId = ({
           </svg>
           <p className="text-green-200 font-medium">{submitMessage}</p>
           <p className="text-green-300/70 text-sm mt-2">
-            Redirecting to home page...
+            Redirecting...
           </p>
         </div>
       )}
@@ -248,7 +419,7 @@ const Step3UniversityId = ({
       )}
 
       {/* Form Fields */}
-      {submitStatus !== "success" && (
+      {submitStatus !== "success" && submitStatus !== "pending" && (
         <>
           <div>
             <label className="block text-white font-medium mb-1 drop-shadow">
