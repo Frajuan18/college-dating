@@ -13,9 +13,7 @@ export const useTheme = () => {
 
 export const ThemeProvider = ({ children }) => {
   const [isDark, setIsDark] = useState(() => {
-    // Check localStorage first
     const saved = localStorage.getItem('theme');
-    // Check system preference as fallback
     if (!saved) {
       return window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
@@ -23,14 +21,14 @@ export const ThemeProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    // Update localStorage when theme changes
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
     
-    // Update document class for global styling
     if (isDark) {
       document.documentElement.classList.add('dark');
+      document.documentElement.style.backgroundColor = '#111827';
     } else {
       document.documentElement.classList.remove('dark');
+      document.documentElement.style.backgroundColor = '#f9fafb';
     }
   }, [isDark]);
 
