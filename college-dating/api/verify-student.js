@@ -69,20 +69,24 @@ export default async function handler(req, res) {
     const fileBuffer = fs.readFileSync(idPhoto.filepath);
     const base64File = fileBuffer.toString('base64');
 
-    // Create display name
-    const fullName = [formData.firstName, formData.lastName].filter(Boolean).join(' ') || 'Not provided';
-    const displayUsername = formData.telegramUsername ? `@${formData.telegramUsername}` : 'Not provided';
+    // Create display name with escaped characters
+    const fullName = escapeMarkdown([formData.firstName, formData.lastName].filter(Boolean).join(' ') || 'Not provided');
+    const displayUsername = formData.telegramUsername ? `@${escapeMarkdown(formData.telegramUsername)}` : 'Not provided';
+    const universityName = escapeMarkdown(formData.universityName || 'Not provided');
+    const studentId = escapeMarkdown(formData.studentId || 'Not provided');
+    const graduationYear = escapeMarkdown(formData.graduationYear || 'Not provided');
+    const gender = escapeMarkdown(formData.gender || 'Not provided');
 
-    // First, send the text message with buttons
-    const message = `🔔 *New Student Verification Request*
+    // First, send the text message with buttons (using HTML parse_mode instead of Markdown)
+    const message = `🔔 <b>New Student Verification Request</b>
 
-👤 *Name:* ${fullName}
-📱 *Telegram:* ${displayUsername}
-🆔 *Telegram ID:* \`${formData.telegramId}\`
-🎓 *University:* ${formData.universityName}
-🆔 *Student ID:* ${formData.studentId}
-📅 *Graduation Year:* ${formData.graduationYear}
-⚥ *Gender:* ${formData.gender}
+👤 <b>Name:</b> ${fullName}
+📱 <b>Telegram:</b> ${displayUsername}
+🆔 <b>Telegram ID:</b> <code>${formData.telegramId}</code>
+🎓 <b>University:</b> ${universityName}
+🆔 <b>Student ID:</b> ${studentId}
+📅 <b>Graduation Year:</b> ${graduationYear}
+⚥ <b>Gender:</b> ${gender}
 
 Please verify this student by clicking one of the buttons below.`;
 
@@ -110,14 +114,14 @@ Please verify this student by clicking one of the buttons below.`;
       ]]
     };
 
-    // Send the text message first
+    // Send the text message first (using HTML parse_mode)
     const textResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: ADMIN_ID,
         text: message,
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
         reply_markup: inlineKeyboard
       })
     });
@@ -125,6 +129,7 @@ Please verify this student by clicking one of the buttons below.`;
     const textResult = await textResponse.json();
     
     if (!textResult.ok) {
+      console.error('Telegram error:', textResult);
       throw new Error(`Failed to send message: ${textResult.description}`);
     }
 
@@ -135,8 +140,8 @@ Please verify this student by clicking one of the buttons below.`;
       body: JSON.stringify({
         chat_id: ADMIN_ID,
         photo: `data:${idPhoto.mimetype};base64,${base64File}`,
-        caption: `📸 *ID Photo for:* ${fullName}\nStudent ID: ${formData.studentId}`,
-        parse_mode: 'Markdown'
+        caption: `📸 <b>ID Photo for:</b> ${fullName}\n<b>Student ID:</b> ${studentId}`,
+        parse_mode: 'HTML'
       })
     });
 
@@ -166,4 +171,11 @@ Please verify this student by clicking one of the buttons below.`;
       message: 'Server error: ' + error.message
     });
   }
+}
+
+// Helper function to escape Markdown characters
+function escapeMarkdown(text) {
+  if (!text) return '';
+  // Escape special characters for Markdown
+  return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
 }

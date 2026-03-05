@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { callback_query, message } = req.body;
+    const { callback_query } = req.body;
     
     // Handle callback queries (button clicks)
     if (callback_query) {
@@ -38,23 +38,20 @@ export default async function handler(req, res) {
       // Create display name for user
       const userDisplay = actionData.username && actionData.username !== 'Not provided' 
         ? `@${actionData.username}` 
-        : `${actionData.name || `User ID: ${actionData.userId}`}`;
+        : actionData.name || `User ID: ${actionData.userId}`;
 
       if (actionData.action === 'verify') {
-        // Send success message to user
+        // Send success message to user (using HTML)
         await fetch(`${TELEGRAM_API}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: actionData.userId,
-            text: `✅ *Verification Approved!*\n\nCongratulations ${userDisplay}! Your student ID has been verified. You can now access all features of College Dating app.\n\n[Open App](https://college-dating.vercel.app)`,
-            parse_mode: 'Markdown',
+            text: `✅ <b>Verification Approved!</b>\n\nCongratulations ${userDisplay}! Your student ID has been verified. You can now access all features of College Dating app.\n\n<a href="https://college-dating.vercel.app">Open App</a>`,
+            parse_mode: 'HTML',
             disable_web_page_preview: true
           })
         });
-
-        // Here you would update your database to mark user as verified
-        // await updateUserVerificationStatus(actionData.userId, true);
 
         // Edit original admin message
         await fetch(`${TELEGRAM_API}/editMessageText`, {
@@ -63,8 +60,8 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             chat_id: msg.chat.id,
             message_id: msg.message_id,
-            text: msg.text + `\n\n✅ *VERIFIED by* ${from.first_name} ${from.last_name || ''} (${from.username ? '@' + from.username : from.id})`,
-            parse_mode: 'Markdown'
+            text: msg.text + `\n\n✅ <b>VERIFIED by</b> ${from.first_name} ${from.last_name || ''} (${from.username ? '@' + from.username : from.id})`,
+            parse_mode: 'HTML'
           })
         });
 
@@ -80,14 +77,14 @@ export default async function handler(req, res) {
         });
 
       } else if (actionData.action === 'reject') {
-        // Send rejection message to user
+        // Send rejection message to user (using HTML)
         await fetch(`${TELEGRAM_API}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: actionData.userId,
-            text: `❌ *Verification Rejected*\n\nHello ${userDisplay}, your student ID verification was rejected. Please make sure your ID photo is clear and shows all required information.\n\n[Try Again](https://college-dating.vercel.app/register)`,
-            parse_mode: 'Markdown',
+            text: `❌ <b>Verification Rejected</b>\n\nHello ${userDisplay}, your student ID verification was rejected. Please make sure your ID photo is clear and shows all required information.\n\n<a href="https://college-dating.vercel.app/register">Try Again</a>`,
+            parse_mode: 'HTML',
             disable_web_page_preview: true
           })
         });
@@ -99,8 +96,8 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             chat_id: msg.chat.id,
             message_id: msg.message_id,
-            text: msg.text + `\n\n❌ *REJECTED by* ${from.first_name} ${from.last_name || ''} (${from.username ? '@' + from.username : from.id})`,
-            parse_mode: 'Markdown'
+            text: msg.text + `\n\n❌ <b>REJECTED by</b> ${from.first_name} ${from.last_name || ''} (${from.username ? '@' + from.username : from.id})`,
+            parse_mode: 'HTML'
           })
         });
 
