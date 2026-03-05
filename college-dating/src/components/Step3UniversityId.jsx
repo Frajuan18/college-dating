@@ -280,12 +280,7 @@ const Step3UniversityId = ({
               • You can close this page and check back later
             </p>
           </div>
-          <button
-            onClick={() => window.location.href = "/"}
-            className="mt-6 bg-white text-yellow-600 px-6 py-2 rounded-lg font-medium hover:bg-yellow-50 transition"
-          >
-            Return to Home
-          </button>
+          
         </div>
       </div>
     );
