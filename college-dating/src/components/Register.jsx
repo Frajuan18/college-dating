@@ -1,4 +1,4 @@
-// Updated Register.jsx with Telegram handling
+// Register.jsx
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import StepProgress from "./StepProgress";
@@ -60,12 +60,15 @@ const Register = () => {
       telegramShared: true,
     });
 
+    // Save to localStorage for CoverPage to detect
+    localStorage.setItem('telegramUser', JSON.stringify(telegramUser));
+    localStorage.setItem('telegramId', telegramUser.id);
+
     // Clear any telegram errors
     if (errors.telegram) {
       setErrors({ ...errors, telegram: null });
     }
 
-    // You could also send this to your backend here
     console.log("Telegram user verified:", telegramUser);
   };
 
@@ -77,12 +80,9 @@ const Register = () => {
     return true;
   };
 
-  // In Register.jsx, update the validateStep2 function:
-
   const validateStep2 = () => {
     const newErrors = {};
     if (!formData.gender) newErrors.gender = "Please select your gender";
-    // Removed interestedIn validation
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -118,27 +118,23 @@ const Register = () => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (validateStep3()) {
-      // Combine all data including Telegram info
-      const completeRegistration = {
-        ...formData,
-        telegramId: formData.telegramData?.id,
-        telegramUsername: formData.telegramData?.username,
-        verifiedAt: new Date().toISOString(),
-      };
-
-      console.log("Registration complete:", completeRegistration);
-
-      // Send to your backend
-      // fetch('/api/register', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(completeRegistration)
-      // })
-
-      navigate("/home");
+      try {
+        // Submit to Supabase through Step3 component
+        // Step3 already handles the submission
+        
+        // After successful submission, show pending state
+        // The Step3 component will show success message
+        console.log("Registration submitted:", formData);
+        
+        // Don't navigate - Step3 will show pending screen
+        // It will redirect to home after 3 seconds if success
+        
+      } catch (error) {
+        console.error("Submission error:", error);
+      }
     }
   };
 
