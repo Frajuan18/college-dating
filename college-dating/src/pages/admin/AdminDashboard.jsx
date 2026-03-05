@@ -8,7 +8,8 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedVerification, setSelectedVerification] = useState(null);
   const [adminNotes, setAdminNotes] = useState('');
-  const [filter, setFilter] = useState('pending');
+  const [filter, setFilter] = useState('all');
+  const [imagePreview, setImagePreview] = useState(null);
 
   useEffect(() => {
     fetchVerifications();
@@ -17,32 +18,15 @@ const AdminDashboard = () => {
   const fetchVerifications = async () => {
     setLoading(true);
     
-    let query = supabase
+    const { data, error } = await supabase
       .from('student_verifications')
-      .select(`
-        *,
-        users (
-          id,
-          telegram_id,
-          telegram_username,
-          first_name,
-          last_name,
-          photo_url,
-          verification_status,
-          created_at
-        )
-      `)
+      .select('*')
       .order('submitted_at', { ascending: false });
 
-    if (filter !== 'all') {
-      query = query.eq('status', filter);
-    }
-
-    const { data, error } = await query;
     if (error) {
       console.error('Error fetching verifications:', error);
     } else {
-      console.log('Fetched verifications:', data);
+      console.log('Verifications:', data);
       setVerifications(data);
     }
     
@@ -50,60 +34,33 @@ const AdminDashboard = () => {
   };
 
   const handleVerification = async (id, status) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
     try {
-      // Get the verification record
-      const { data: verification, error: fetchError } = await supabase
+      const { data: verification } = await supabase
         .from('student_verifications')
-        .select('*, users(id)')
+        .select('*')
         .eq('id', id)
         .single();
 
-      if (fetchError) throw fetchError;
-
-      // Update verification status
-      const { error: updateError } = await supabase
+      const { error } = await supabase
         .from('student_verifications')
         .update({
           status,
           admin_notes: adminNotes,
-          reviewed_by: user.id,
           reviewed_at: new Date().toISOString()
         })
         .eq('id', id);
 
-      if (updateError) throw updateError;
+      if (error) throw error;
 
-      // Update user verification status based on approval/rejection
-      const userStatus = status === 'approved' ? 'verified' : 'unverified';
-      
-      const { error: userUpdateError } = await supabase
-        .from('users')
-        .update({ verification_status: userStatus })
-        .eq('id', verification.user_id);
-
-      if (userUpdateError) throw userUpdateError;
-
-      // Delete photo from storage
-      if (verification.id_photo_path) {
-        const { error: deleteError } = await supabase.storage
+      if (verification?.id_photo_path) {
+        await supabase.storage
           .from('student-ids')
           .remove([verification.id_photo_path]);
-
-        if (deleteError) {
-          console.error('Error deleting photo:', deleteError);
-        } else {
-          // Update verification to remove photo URLs
-          await supabase
-            .from('student_verifications')
-            .update({ id_photo_url: null, id_photo_path: null })
-            .eq('id', id);
-        }
       }
 
       setSelectedVerification(null);
       setAdminNotes('');
+      setImagePreview(null);
       fetchVerifications();
       
     } catch (error) {
@@ -123,16 +80,11 @@ const AdminDashboard = () => {
       approved: 'bg-green-100 text-green-800',
       rejected: 'bg-red-100 text-red-800'
     };
-    return styles[status] || styles.pending;
+    return styles[status] || 'bg-gray-100 text-gray-800';
   };
 
-  const getUserStatusBadge = (status) => {
-    const styles = {
-      verified: 'bg-green-100 text-green-800',
-      unverified: 'bg-gray-100 text-gray-800',
-      pending: 'bg-yellow-100 text-yellow-800'
-    };
-    return styles[status] || styles.unverified;
+  const openImagePreview = (url) => {
+    setImagePreview(url);
   };
 
   return (
@@ -180,20 +132,19 @@ const AdminDashboard = () => {
               </div>
             ) : verifications.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-gray-500">No verifications found</p>
+                <p className="text-gray-500 text-lg">No verifications found</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Photo</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">University</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student ID</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Graduation</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gender</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Verification Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                     </tr>
@@ -202,22 +153,21 @@ const AdminDashboard = () => {
                     {verifications.map((v) => (
                       <tr key={v.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
-                          <div className="font-medium text-gray-900">
-                            {v.users?.first_name} {v.users?.last_name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            @{v.users?.telegram_username}
-                          </div>
+                          {v.id_photo_url ? (
+                            <button
+                              onClick={() => openImagePreview(v.id_photo_url)}
+                              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            >
+                              View Photo
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 text-sm">No photo</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700">{v.university_name}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{v.student_id}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{v.graduation_year}</td>
                         <td className="px-6 py-4 text-sm text-gray-700 capitalize">{v.gender}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getUserStatusBadge(v.users?.verification_status)}`}>
-                            {v.users?.verification_status || 'unverified'}
-                          </span>
-                        </td>
                         <td className="px-6 py-4">
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadge(v.status)}`}>
                             {v.status}
@@ -258,30 +208,9 @@ const AdminDashboard = () => {
               </div>
 
               <div className="space-y-4">
-                {/* User Info */}
-                <div className="bg-gray-50 p-4 rounded">
-                  <h3 className="font-medium mb-2">User Information</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Name</p>
-                      <p className="font-medium">{selectedVerification.users?.first_name} {selectedVerification.users?.last_name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Telegram</p>
-                      <p className="font-medium">@{selectedVerification.users?.telegram_username}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Current Status</p>
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getUserStatusBadge(selectedVerification.users?.verification_status)}`}>
-                        {selectedVerification.users?.verification_status || 'unverified'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Verification Info */}
                 <div className="bg-gray-50 p-4 rounded">
-                  <h3 className="font-medium mb-2">Verification Information</h3>
+                  <h3 className="font-medium mb-2">Verification Details</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-500">University</p>
@@ -305,12 +234,19 @@ const AdminDashboard = () => {
                 {/* ID Photo */}
                 {selectedVerification.id_photo_url && (
                   <div>
-                    <p className="text-sm text-gray-500 mb-2">ID Photo (will be deleted after review)</p>
-                    <img
-                      src={selectedVerification.id_photo_url}
-                      alt="Student ID"
-                      className="max-w-full h-auto border rounded"
-                    />
+                    <p className="text-sm text-gray-500 mb-2">ID Photo</p>
+                    <div className="border rounded p-2 bg-gray-50">
+                      <img
+                        src={selectedVerification.id_photo_url}
+                        alt="Student ID"
+                        className="max-w-full h-auto mx-auto"
+                        onClick={() => openImagePreview(selectedVerification.id_photo_url)}
+                        style={{ cursor: 'pointer', maxHeight: '300px' }}
+                      />
+                      <p className="text-xs text-gray-400 mt-2 text-center">
+                        Click image to enlarge
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -332,7 +268,7 @@ const AdminDashboard = () => {
                     onClick={() => handleVerification(selectedVerification.id, 'approved')}
                     className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700"
                   >
-                    Approve & Verify User
+                    Approve & Delete Photo
                   </button>
                   <button
                     onClick={() => handleVerification(selectedVerification.id, 'rejected')}
@@ -342,6 +278,30 @@ const AdminDashboard = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full Screen Image Preview Modal */}
+        {imagePreview && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 z-50"
+            onClick={() => setImagePreview(null)}
+          >
+            <div className="relative max-w-4xl max-h-full">
+              <button
+                onClick={() => setImagePreview(null)}
+                className="absolute top-2 right-2 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-70"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <img
+                src={imagePreview}
+                alt="Full size ID"
+                className="max-w-full max-h-screen object-contain"
+              />
             </div>
           </div>
         )}
