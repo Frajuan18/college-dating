@@ -5,87 +5,103 @@ export const submitVerification = async (formData) => {
   try {
     console.log('Submitting verification data:', formData);
 
-    // First, check if user exists or create new user
-    let { data: user, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('telegram_id', formData.telegramData?.id || formData.telegramId)
-      .single();
-
-    if (userError && userError.code === 'PGRST116') {
-      // User doesn't exist, create new user
-      const { data: newUser, error: createError } = await supabase
-        .from('users')
-        .insert([{
-          telegram_id: formData.telegramData?.id || formData.telegramId,
-          telegram_username: formData.telegramData?.username || formData.telegramUsername,
-          first_name: formData.telegramData?.first_name || formData.firstName,
-          last_name: formData.telegramData?.last_name || formData.lastName,
-          photo_url: formData.telegramData?.photo_url
-        }])
-        .select()
-        .single();
-
-      if (createError) throw createError;
-      user = newUser;
-    } else if (userError) {
-      throw userError;
+    // Get telegram data
+    const telegramData = formData.telegramData || {};
+    const telegramId = telegramData.id || formData.telegramId;
+    
+    if (!telegramId) {
+      throw new Error('No Telegram ID found');
     }
 
-    // Upload ID photo if exists
-    let idPhotoUrl = null;
-    let idPhotoPath = null;
-    
+    // 1. Insert into users table
+    const userData = {
+      telegram_id: telegramId,
+      telegram_username: telegramData.username || formData.telegramUsername || null,
+      first_name: telegramData.first_name || formData.firstName || 'Unknown',
+      last_name: telegramData.last_name || formData.lastName || '',
+      photo_url: telegramData.photo_url || null
+    };
+
+    console.log('Inserting user:', userData);
+
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .insert([userData])
+      .select()
+      .single();
+
+    if (userError) {
+      // If user already exists, get the existing user
+      if (userError.code === '23505') { // Unique violation
+        const { data: existingUser } = await supabase
+          .from('users')
+          .select('*')
+          .eq('telegram_id', telegramId)
+          .single();
+        
+        if (existingUser) {
+          user = existingUser;
+        } else {
+          throw userError;
+        }
+      } else {
+        throw userError;
+      }
+    }
+
+    console.log('User saved:', user);
+
+    // 2. Insert into student_verifications table
+    const verificationData = {
+      user_id: user.id,
+      university_name: formData.universityName,
+      student_id: formData.studentId,
+      graduation_year: parseInt(formData.graduationYear),
+      gender: formData.gender,
+      status: 'pending',
+      submitted_at: new Date().toISOString()
+    };
+
+    // Upload photo if exists
     if (formData.idPhoto) {
       try {
-        // Generate a unique filename
-        const fileName = `${user.id}/${Date.now()}_${formData.idPhoto.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+        const fileExt = formData.idPhoto.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
         
         const { error: uploadError } = await supabase.storage
           .from('student-ids')
           .upload(fileName, formData.idPhoto);
 
-        if (uploadError) {
-          console.error('Upload error:', uploadError);
-          if (uploadError.message.includes('bucket')) {
-            console.warn('Storage bucket not configured, continuing without photo');
-          } else {
-            throw uploadError;
-          }
-        } else {
+        if (!uploadError) {
           const { data: { publicUrl } } = supabase.storage
             .from('student-ids')
             .getPublicUrl(fileName);
 
-          idPhotoUrl = publicUrl;
-          idPhotoPath = fileName; // Save the path for later deletion
+          verificationData.id_photo_url = publicUrl;
+          verificationData.id_photo_path = fileName;
         }
       } catch (uploadError) {
         console.error('Photo upload failed:', uploadError);
-        // Continue without photo
       }
     }
 
-    // Create verification record with photo path
+    console.log('Inserting verification:', verificationData);
+
     const { data: verification, error: verificationError } = await supabase
       .from('student_verifications')
-      .insert([{
-        user_id: user.id,
-        university_name: formData.universityName,
-        student_id: formData.studentId,
-        graduation_year: formData.graduationYear,
-        gender: formData.gender,
-        id_photo_url: idPhotoUrl,
-        id_photo_path: idPhotoPath, // Save path for deletion
-        status: 'pending'
-      }])
+      .insert([verificationData])
       .select();
 
-    if (verificationError) throw verificationError;
+    if (verificationError) {
+      throw verificationError;
+    }
+
+    console.log('Verification saved:', verification);
 
     return { 
       success: true, 
-      message: 'Verification submitted successfully! Your ID photo will be deleted after review.', 
+      message: 'Verification submitted successfully!', 
+      user,
       verification 
     };
   } catch (error) {
