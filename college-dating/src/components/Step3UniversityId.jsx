@@ -1,53 +1,193 @@
 // components/Step3UniversityId.jsx
 import React, { useState } from "react";
-import { submitVerification } from "../services/verificationService";
+import { supabase } from "../lib/supabaseClient";
 
 const Step3UniversityId = ({
   formData,
   errors,
   handleChange,
   handleFileUpload,
-  onSubmit,
   onBack,
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState(null);
   const [submitMessage, setSubmitMessage] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setSubmitStatus(null);
     setSubmitMessage("");
+    setUploadProgress(0);
 
     try {
       console.log("Form data being submitted:", formData);
 
-      const result = await submitVerification(formData);
-
-      if (result.success) {
-        setSubmitStatus("success");
-        setSubmitMessage(result.message);
-
-        setTimeout(() => {
-          window.location.href = "/";
-        }, 3000);
-      } else {
-        setSubmitStatus("error");
-        setSubmitMessage(result.message);
+      // Get telegram data
+      const telegramData = formData.telegramData || {};
+      const telegramId = telegramData.id || formData.telegramId;
+      
+      if (!telegramId) {
+        throw new Error("No Telegram ID found. Please restart the process.");
       }
+
+      // Validate required fields
+      if (!formData.universityName || !formData.studentId || !formData.graduationYear || !formData.gender) {
+        throw new Error("Please fill all required fields");
+      }
+
+      if (!formData.idPhoto) {
+        throw new Error("Please upload your university ID photo");
+      }
+
+      // 1. First, check if user exists or create new user
+      setUploadProgress(10);
+      setSubmitMessage("Checking user information...");
+      
+      let { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .maybeSingle();
+
+      if (userError) throw userError;
+
+      if (!user) {
+        setSubmitMessage("Creating user account...");
+        
+        // Create new user
+        const userData = {
+          telegram_id: telegramId,
+          telegram_username: telegramData.username || formData.telegramUsername || null,
+          first_name: telegramData.first_name || formData.firstName || 'Unknown',
+          last_name: telegramData.last_name || formData.lastName || '',
+          photo_url: telegramData.photo_url || null,
+          verification_status: 'pending'
+        };
+
+        const { data: newUser, error: createError } = await supabase
+          .from('users')
+          .insert([userData])
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        user = newUser;
+      } else {
+        // Update existing user status to pending
+        await supabase
+          .from('users')
+          .update({ verification_status: 'pending' })
+          .eq('id', user.id);
+      }
+
+      setUploadProgress(30);
+
+      // 2. Upload the image to Supabase Storage
+      setSubmitMessage("Uploading ID photo...");
+      
+      const file = formData.idPhoto;
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      
+      console.log("Uploading image:", fileName);
+
+      const { error: uploadError } = await supabase.storage
+        .from('student-ids')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        throw new Error("Failed to upload image: " + uploadError.message);
+      }
+
+      setUploadProgress(70);
+
+      // Get the public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('student-ids')
+        .getPublicUrl(fileName);
+
+      console.log("Image uploaded, public URL:", publicUrl);
+
+      // 3. Create verification record
+      setSubmitMessage("Saving verification data...");
+      
+      const verificationData = {
+        user_id: user.id,
+        university_name: formData.universityName,
+        student_id: formData.studentId,
+        graduation_year: parseInt(formData.graduationYear),
+        gender: formData.gender,
+        id_photo_url: publicUrl,
+        id_photo_path: fileName,
+        status: 'pending',
+        submitted_at: new Date().toISOString()
+      };
+
+      console.log("Creating verification:", verificationData);
+
+      const { data: verification, error: verificationError } = await supabase
+        .from('student_verifications')
+        .insert([verificationData])
+        .select();
+
+      if (verificationError) {
+        // If verification fails, try to delete the uploaded image
+        await supabase.storage
+          .from('student-ids')
+          .remove([fileName]);
+        throw verificationError;
+      }
+
+      setUploadProgress(100);
+
+      console.log("Verification created:", verification);
+
+      setSubmitStatus("success");
+      setSubmitMessage("Verification submitted successfully! Your ID will be reviewed by admin.");
+
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 3000);
+
     } catch (error) {
       console.error("Submission error:", error);
       setSubmitStatus("error");
-      setSubmitMessage(error.message);
+      setSubmitMessage(error.message || "Failed to submit verification");
     } finally {
       setIsSubmitting(false);
+      setUploadProgress(0);
+    }
+  };
+
+  // Custom file handler to ensure file is properly captured
+  const onFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Check file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert("File too large. Maximum size is 5MB");
+        return;
+      }
+      
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        alert("Please upload an image file");
+        return;
+      }
+
+      // Pass to parent's handler
+      handleFileUpload("idPhoto", e);
     }
   };
 
   return (
     <form onSubmit={handleFormSubmit} className="space-y-5">
-      {/* ... rest of your form JSX remains exactly the same ... */}
       <div className="text-center mb-2">
         <h2 className="text-white text-2xl font-bold mb-2">
           Verify your student status
@@ -88,6 +228,22 @@ const Step3UniversityId = ({
           >
             Try Again
           </button>
+        </div>
+      )}
+
+      {/* Upload Progress */}
+      {isSubmitting && uploadProgress > 0 && (
+        <div className="bg-white/10 rounded-lg p-4">
+          <div className="flex justify-between text-white text-sm mb-1">
+            <span>{submitMessage || "Processing..."}</span>
+            <span>{uploadProgress}%</span>
+          </div>
+          <div className="w-full bg-white/20 rounded-full h-2">
+            <div 
+              className="bg-pink-200 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            ></div>
+          </div>
         </div>
       )}
 
@@ -165,12 +321,14 @@ const Step3UniversityId = ({
               University ID Photo
             </label>
             <div
-              className={`border-2 border-dashed border-white/30 rounded-lg p-6 text-center hover:border-pink-200 transition cursor-pointer ${isSubmitting ? "opacity-50 pointer-events-none" : ""}`}
+              className={`border-2 border-dashed border-white/30 rounded-lg p-6 text-center hover:border-pink-200 transition cursor-pointer ${
+                isSubmitting ? "opacity-50 pointer-events-none" : ""
+              }`}
             >
               <input
                 type="file"
                 accept="image/*"
-                onChange={(e) => handleFileUpload("idPhoto", e)}
+                onChange={onFileChange}
                 className="hidden"
                 id="idPhoto"
                 disabled={isSubmitting}
@@ -181,6 +339,9 @@ const Step3UniversityId = ({
                   <div>
                     <p className="text-pink-200 font-medium">
                       {formData.idPhoto.name}
+                    </p>
+                    <p className="text-green-200 text-xs mt-1">
+                      ✓ File selected
                     </p>
                     <p className="text-white/50 text-xs mt-1">
                       Click to change
@@ -205,7 +366,7 @@ const Step3UniversityId = ({
                       Click to upload your university ID
                     </p>
                     <p className="text-white/50 text-xs mt-1">
-                      JPG, PNG or PDF (max 5MB)
+                      JPG or PNG (max 5MB)
                     </p>
                   </>
                 )}
@@ -229,8 +390,7 @@ const Step3UniversityId = ({
                   clipRule="evenodd"
                 />
               </svg>
-              Your ID is encrypted and only used for verification. We never
-              share your personal documents.
+              Your ID is encrypted and only used for verification. We never share your personal documents.
             </p>
           </div>
 
@@ -270,7 +430,7 @@ const Step3UniversityId = ({
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     ></path>
                   </svg>
-                  Submitting...
+                  {uploadProgress > 0 ? `${uploadProgress}%` : "Uploading..."}
                 </span>
               ) : (
                 "Submit for Verification"
