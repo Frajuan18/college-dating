@@ -1,7 +1,8 @@
 // pages/Home.jsx
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { supabase } from '../lib/supabaseClient';
 import Navbar from '../components/Navbar';
 import { 
   HiOutlineHeart, 
@@ -15,81 +16,204 @@ import {
   HiOutlineBookOpen,
   HiOutlineFire,
   HiOutlineStar,
-  HiOutlineTrendingUp
+  HiOutlineTrendingUp,
+  HiOutlineUser
 } from 'react-icons/hi';
 
 const Home = () => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
-  const [featuredMatches, setFeaturedMatches] = useState([]);
-  const [trendingNow, setTrendingNow] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [potentialMatches, setPotentialMatches] = useState([]);
+  const [trendingUsers, setTrendingUsers] = useState([]);
   const [nearbyUsers, setNearbyUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    dailyMatches: 0,
+    totalUniversities: 0
+  });
 
   useEffect(() => {
-    // Simulate fetching data
-    setTimeout(() => {
-      setFeaturedMatches([
-        { 
-          id: 1, 
-          name: 'Sarah Johnson', 
-          age: 24, 
-          university: 'Stanford University', 
-          image: 'https://images.unsplash.com/photo-1494790108777-406d7f1f3a9f?w=400',
-          distance: '2 miles away',
-          major: 'Computer Science',
-          interests: ['Photography', 'Hiking', 'Coffee'],
-          verified: true
-        },
-        { 
-          id: 2, 
-          name: 'Michael Chen', 
-          age: 26, 
-          university: 'MIT', 
-          image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400',
-          distance: '3 miles away',
-          major: 'Engineering',
-          interests: ['Music', 'Gaming', 'Travel'],
-          verified: true
-        },
-        { 
-          id: 3, 
-          name: 'Emma Davis', 
-          age: 23, 
-          university: 'Harvard University', 
-          image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400',
-          distance: '1 mile away',
-          major: 'Business',
-          interests: ['Yoga', 'Art', 'Cooking'],
-          verified: true
-        },
-        { 
-          id: 4, 
-          name: 'James Wilson', 
-          age: 25, 
-          university: 'UC Berkeley', 
-          image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
-          distance: '4 miles away',
-          major: 'Physics',
-          interests: ['Chess', 'Running', 'Reading'],
-          verified: true
-        },
-      ]);
-
-      setTrendingNow([
-        { id: 5, name: 'Olivia Martinez', age: 22, university: 'UCLA', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400', likes: 234 },
-        { id: 6, name: 'William Brown', age: 27, university: 'Columbia', image: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400', likes: 189 },
-        { id: 7, name: 'Sophia Lee', age: 24, university: 'NYU', image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400', likes: 156 },
-      ]);
-
-      setNearbyUsers([
-        { id: 8, name: 'Ethan Taylor', age: 25, university: 'USC', image: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=400', distance: '0.5 miles' },
-        { id: 9, name: 'Mia Anderson', age: 23, university: 'UCSD', image: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=400', distance: '1.2 miles' },
-      ]);
-
-      setLoading(false);
-    }, 1000);
+    fetchCurrentUser();
   }, []);
+
+  const fetchCurrentUser = async () => {
+    try {
+      // Get current user from localStorage
+      const telegramData = JSON.parse(localStorage.getItem('telegramUser') || '{}');
+      const telegramId = telegramData.id || localStorage.getItem('telegramId');
+      
+      if (!telegramId) {
+        navigate('/');
+        return;
+      }
+
+      // Fetch current user data
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .single();
+
+      if (userError) throw userError;
+      
+      setCurrentUser(user);
+      
+      // Fetch potential matches (opposite gender)
+      await fetchPotentialMatches(user);
+      await fetchTrendingUsers(user);
+      await fetchNearbyUsers(user);
+      await fetchStats();
+
+    } catch (error) {
+      console.error('Error fetching user:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPotentialMatches = async (user) => {
+    try {
+      // Get opposite gender
+      const oppositeGender = user.gender === 'male' ? 'female' : 'male';
+      
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          id,
+          telegram_id,
+          first_name,
+          last_name,
+          gender,
+          photo_url,
+          verification_status,
+          university_name,
+          graduation_year,
+          interests,
+          bio,
+          location
+        `)
+        .eq('gender', oppositeGender)
+        .eq('verification_status', 'verified')
+        .neq('telegram_id', user.telegram_id) // Exclude current user
+        .limit(8);
+
+      if (error) throw error;
+      
+      // Format the data
+      const formattedMatches = data.map(match => ({
+        id: match.id,
+        name: `${match.first_name || ''} ${match.last_name || ''}`.trim() || 'User',
+        age: calculateAge(match.graduation_year),
+        university: match.university_name || 'University not specified',
+        image: match.photo_url || 'https://via.placeholder.com/400',
+        interests: match.interests || ['Student'],
+        verified: match.verification_status === 'verified',
+        bio: match.bio || 'Looking to connect with fellow students',
+        location: match.location || 'Campus'
+      }));
+
+      setPotentialMatches(formattedMatches);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+    }
+  };
+
+  const fetchTrendingUsers = async (user) => {
+    try {
+      // Get most active/recently verified users
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, photo_url, university_name, verification_status')
+        .eq('verification_status', 'verified')
+        .neq('telegram_id', user.telegram_id)
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (error) throw error;
+
+      // Add random like counts for trending effect
+      const formattedTrending = data.map(user => ({
+        id: user.id,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'User',
+        university: user.university_name || 'University',
+        image: user.photo_url || 'https://via.placeholder.com/400',
+        likes: Math.floor(Math.random() * 200) + 50 // Random likes between 50-250
+      }));
+
+      setTrendingUsers(formattedTrending);
+    } catch (error) {
+      console.error('Error fetching trending:', error);
+    }
+  };
+
+  const fetchNearbyUsers = async (user) => {
+    try {
+      // For now, just get some random verified users
+      // You can add location-based filtering later
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, photo_url, university_name, location')
+        .eq('verification_status', 'verified')
+        .neq('telegram_id', user.telegram_id)
+        .limit(4);
+
+      if (error) throw error;
+
+      const formattedNearby = data.map(user => ({
+        id: user.id,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'User',
+        university: user.university_name || 'University',
+        image: user.photo_url || 'https://via.placeholder.com/400',
+        distance: user.location || 'Nearby'
+      }));
+
+      setNearbyUsers(formattedNearby);
+    } catch (error) {
+      console.error('Error fetching nearby:', error);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      // Get total verified users
+      const { count: totalUsers, error: usersError } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('verification_status', 'verified');
+
+      if (usersError) throw usersError;
+
+      // Get unique universities count
+      const { data: universities, error: uniError } = await supabase
+        .from('users')
+        .select('university_name')
+        .eq('verification_status', 'verified')
+        .not('university_name', 'is', null);
+
+      if (uniError) throw uniError;
+
+      const uniqueUniversities = [...new Set(universities.map(u => u.university_name))].length;
+
+      setStats({
+        totalUsers: totalUsers || 0,
+        dailyMatches: Math.floor(Math.random() * 100) + 50, // Random for now
+        totalUniversities: uniqueUniversities || 0
+      });
+
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  const calculateAge = (graduationYear) => {
+    // Rough estimate: assume started at 18, graduating in 4 years
+    const currentYear = new Date().getFullYear();
+    const graduationAge = 22; // Average graduation age
+    const yearsUntilGraduation = graduationYear - currentYear;
+    return graduationAge - yearsUntilGraduation;
+  };
 
   const getCardStyles = () => {
     return isDark
@@ -134,20 +258,20 @@ const Home = () => {
         {/* Hero Section with Greeting */}
         <div className="mb-10">
           <h1 className={`text-4xl md:text-5xl font-bold mb-4 ${getTextStyles()}`}>
-            Find your <span className="text-rose-500">spark</span> today
+            Welcome back, <span className="text-rose-500">{currentUser?.first_name || 'User'}</span>
           </h1>
           <p className={`text-lg max-w-2xl ${getSubtextStyles()}`}>
-            Connect with verified students who share your interests and ambitions.
+            Discover verified students who share your interests and ambitions.
           </p>
         </div>
 
         {/* Stats Bar */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
           {[
-            { label: 'Active Users', value: '10,234', icon: HiOutlineUserGroup, change: '+12%' },
-            { label: 'Daily Matches', value: '567', icon: HiOutlineHeart, change: '+8%' },
-            { label: 'Messages Sent', value: '45K', icon: HiOutlineChat, change: '+23%' },
-            { label: 'Universities', value: '156', icon: HiOutlineAcademicCap, change: '+5' },
+            { label: 'Verified Students', value: stats.totalUsers.toLocaleString(), icon: HiOutlineUserGroup, change: 'Active' },
+            { label: 'Daily Matches', value: stats.dailyMatches, icon: HiOutlineHeart, change: 'Today' },
+            { label: 'Universities', value: stats.totalUniversities, icon: HiOutlineAcademicCap, change: 'Partnered' },
+            { label: 'Your Type', value: currentUser?.gender === 'male' ? 'Women' : 'Men', icon: HiOutlineUser, change: 'Showing' },
           ].map((stat, index) => {
             const Icon = stat.icon;
             return (
@@ -158,7 +282,7 @@ const Home = () => {
                 <div className="flex items-center justify-between mb-3">
                   <Icon className={`w-8 h-8 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
                   <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                    isDark ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-600'
+                    isDark ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-600'
                   }`}>
                     {stat.change}
                   </span>
@@ -170,12 +294,14 @@ const Home = () => {
           })}
         </div>
 
-        {/* Trending Now Section */}
+        {/* Potential Matches Section (Opposite Gender) */}
         <section className="mb-12">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
-              <HiOutlineFire className={`w-6 h-6 ${isDark ? 'text-orange-400' : 'text-orange-500'}`} />
-              <h2 className={`text-2xl font-bold ${getSectionTitleStyles()}`}>Trending Now</h2>
+              <HiOutlineHeart className={`w-6 h-6 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
+              <h2 className={`text-2xl font-bold ${getSectionTitleStyles()}`}>
+                {currentUser?.gender === 'male' ? 'Women' : 'Men'} Near You
+              </h2>
             </div>
             <button className={`text-sm font-medium flex items-center gap-1 ${
               isDark ? 'text-rose-400 hover:text-rose-300' : 'text-rose-500 hover:text-rose-600'
@@ -184,56 +310,8 @@ const Home = () => {
             </button>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {trendingNow.map((user) => (
-              <div
-                key={user.id}
-                className={`rounded-2xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] cursor-pointer ${getCardStyles()}`}
-                onClick={() => navigate(`/profile/${user.id}`)}
-              >
-                <div className="relative">
-                  <img src={user.image} alt={user.name} className="w-full h-48 object-cover" />
-                  <div className="absolute top-3 right-3 bg-rose-500 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
-                    <HiOutlineHeart className="w-3 h-3" />
-                    {user.likes}
-                  </div>
-                </div>
-                <div className="p-5">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className={`text-lg font-semibold ${getTextStyles()}`}>{user.name}, {user.age}</h3>
-                    <HiOutlineSparkles className={`w-4 h-4 ${isDark ? 'text-yellow-400' : 'text-yellow-500'}`} />
-                  </div>
-                  <p className={`text-sm mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
-                    <HiOutlineAcademicCap className="w-4 h-4" />
-                    {user.university}
-                  </p>
-                  <button className={`w-full py-2 rounded-xl font-medium transition ${
-                    isDark 
-                      ? 'bg-rose-600 hover:bg-rose-700 text-white' 
-                      : 'bg-rose-500 hover:bg-rose-600 text-white'
-                  }`}>
-                    Connect
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Featured Matches Section */}
-        <section className="mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <HiOutlineStar className={`w-6 h-6 ${isDark ? 'text-yellow-400' : 'text-yellow-500'}`} />
-              <h2 className={`text-2xl font-bold ${getSectionTitleStyles()}`}>Featured Matches</h2>
-            </div>
-            <button className={`text-sm font-medium ${isDark ? 'text-rose-400 hover:text-rose-300' : 'text-rose-500 hover:text-rose-600'}`}>
-              See All
-            </button>
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredMatches.map((user) => (
+            {potentialMatches.map((user) => (
               <div
                 key={user.id}
                 className={`rounded-2xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] cursor-pointer ${getCardStyles()}`}
@@ -248,16 +326,10 @@ const Home = () => {
                   )}
                 </div>
                 <div className="p-5">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className={`text-lg font-semibold ${getTextStyles()}`}>{user.name}, {user.age}</h3>
-                  </div>
+                  <h3 className={`text-lg font-semibold mb-1 ${getTextStyles()}`}>{user.name}</h3>
                   <p className={`text-sm mb-2 flex items-center gap-1 ${getSubtextStyles()}`}>
                     <HiOutlineAcademicCap className="w-4 h-4" />
                     {user.university}
-                  </p>
-                  <p className={`text-xs mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
-                    <HiOutlineLocationMarker className="w-3 h-3" />
-                    {user.distance}
                   </p>
                   <div className="flex flex-wrap gap-1 mb-4">
                     {user.interests.slice(0, 2).map((interest, i) => (
@@ -272,14 +344,47 @@ const Home = () => {
                         {interest}
                       </span>
                     ))}
-                    {user.interests.length > 2 && (
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500'
-                      }`}>
-                        +{user.interests.length - 2}
-                      </span>
-                    )}
                   </div>
+                  <button className={`w-full py-2 rounded-xl font-medium transition ${
+                    isDark 
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white' 
+                      : 'bg-rose-500 hover:bg-rose-600 text-white'
+                  }`}>
+                    Connect
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Trending Now Section */}
+        <section className="mb-12">
+          <div className="flex items-center gap-2 mb-6">
+            <HiOutlineFire className={`w-6 h-6 ${isDark ? 'text-orange-400' : 'text-orange-500'}`} />
+            <h2 className={`text-2xl font-bold ${getSectionTitleStyles()}`}>Trending Now</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {trendingUsers.map((user) => (
+              <div
+                key={user.id}
+                className={`rounded-2xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] cursor-pointer ${getCardStyles()}`}
+                onClick={() => navigate(`/profile/${user.id}`)}
+              >
+                <div className="relative">
+                  <img src={user.image} alt={user.name} className="w-full h-48 object-cover" />
+                  <div className="absolute top-3 right-3 bg-rose-500 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
+                    <HiOutlineHeart className="w-3 h-3" />
+                    {user.likes}
+                  </div>
+                </div>
+                <div className="p-5">
+                  <h3 className={`text-lg font-semibold mb-2 ${getTextStyles()}`}>{user.name}</h3>
+                  <p className={`text-sm mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
+                    <HiOutlineAcademicCap className="w-4 h-4" />
+                    {user.university}
+                  </p>
                   <button className={`w-full py-2 rounded-xl font-medium transition ${
                     isDark 
                       ? 'bg-rose-600 hover:bg-rose-700 text-white' 
@@ -297,7 +402,7 @@ const Home = () => {
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-6">
             <HiOutlineLocationMarker className={`w-6 h-6 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-            <h2 className={`text-2xl font-bold ${getSectionTitleStyles()}`}>Nearby You</h2>
+            <h2 className={`text-2xl font-bold ${getSectionTitleStyles()}`}>Nearby Students</h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -309,7 +414,7 @@ const Home = () => {
               >
                 <img src={user.image} alt={user.name} className="w-20 h-20 rounded-xl object-cover" />
                 <div className="flex-1">
-                  <h3 className={`font-semibold ${getTextStyles()}`}>{user.name}, {user.age}</h3>
+                  <h3 className={`font-semibold ${getTextStyles()}`}>{user.name}</h3>
                   <p className={`text-sm mb-1 flex items-center gap-1 ${getSubtextStyles()}`}>
                     <HiOutlineAcademicCap className="w-4 h-4" />
                     {user.university}
@@ -333,7 +438,7 @@ const Home = () => {
 
         {/* Interests Categories */}
         <section className="mb-12">
-          <h2 className={`text-2xl font-bold mb-6 ${getSectionTitleStyles()}`}>Explore by Interest</h2>
+          <h2 className={`text-2xl font-bold mb-6 ${getSectionTitleStyles()}`}>Browse by Interest</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {[
               { name: 'Photography', icon: HiOutlineCamera, color: 'purple' },
