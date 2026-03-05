@@ -7,45 +7,50 @@ import {
   HiOutlineCheckCircle, 
   HiOutlineXCircle,
   HiOutlineHome,
-  HiOutlineRefresh 
+  HiOutlineRefresh,
+  HiOutlineUser 
 } from 'react-icons/hi';
 
 const CoverPage = () => {
   const navigate = useNavigate();
   const [verificationStatus, setVerificationStatus] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
+  const [userName, setUserName] = useState('');
 
   useEffect(() => {
-    checkUserStatus();
+    checkUserVerificationStatus();
   }, []);
 
-  const checkUserStatus = async () => {
+  const checkUserVerificationStatus = async () => {
     try {
-      // Check if user is logged in
-      const { data: { user: authUser } } = await supabase.auth.getUser();
+      // Get telegram data from localStorage (saved during registration)
+      const telegramData = JSON.parse(localStorage.getItem('telegramUser') || '{}');
+      const telegramId = telegramData.id || localStorage.getItem('telegramId');
       
-      if (!authUser) {
+      if (!telegramId) {
+        console.log('No telegram user found');
         setLoading(false);
         return;
       }
 
-      setUser(authUser);
+      console.log('Checking status for telegram ID:', telegramId);
 
-      // Get user's email to find in users table
+      // First get the user from users table using telegram_id
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('*')
-        .eq('email', authUser.email)
+        .select('id, first_name, last_name')
+        .eq('telegram_id', telegramId)
         .maybeSingle();
 
       if (userError) throw userError;
 
       if (userData) {
-        // Check if user has any verifications
+        setUserName(`${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'User');
+        
+        // Then get the latest verification from student_verifications table
         const { data: verifications, error: verifError } = await supabase
           .from('student_verifications')
-          .select('status')
+          .select('status, submitted_at')
           .eq('user_id', userData.id)
           .order('submitted_at', { ascending: false })
           .limit(1);
@@ -53,17 +58,20 @@ const CoverPage = () => {
         if (verifError) throw verifError;
 
         if (verifications && verifications.length > 0) {
+          console.log('Found verification:', verifications[0]);
           setVerificationStatus(verifications[0].status);
         }
       }
     } catch (error) {
-      console.error('Error checking status:', error);
+      console.error('Error checking verification status:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleTryAgain = () => {
+    // Clear any existing verification data and go to register
+    localStorage.removeItem('verificationInProgress');
     navigate('/register');
   };
 
@@ -71,28 +79,37 @@ const CoverPage = () => {
     navigate('/home');
   };
 
+  const handleGetStarted = () => {
+    navigate('/register');
+  };
+
+  const handleLogin = () => {
+    navigate('/login');
+  };
+
   // Render different content based on verification status
-  const renderAuthButtons = () => {
+  const renderContent = () => {
     if (loading) {
       return (
-        <div className="flex justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent"></div>
         </div>
       );
     }
 
-    if (!user) {
-      // Not logged in - show Get Started and Login buttons
+    // No user logged in
+    if (!localStorage.getItem('telegramId') && !localStorage.getItem('telegramUser')) {
       return (
         <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
           <button 
-            onClick={() => navigate('/register')}
+            onClick={handleGetStarted}
             className="bg-white text-rose-600 text-base sm:text-lg font-bold px-8 sm:px-10 py-3.5 sm:py-4 rounded-full shadow-xl hover:scale-105 transition-transform duration-200 active:scale-95 w-full sm:w-auto min-w-[200px] flex items-center justify-center gap-2"
           >
+            <HiOutlineUser className="w-5 h-5" />
             <span>Get Started Free</span>
           </button>
           <button 
-            onClick={() => navigate('/login')}
+            onClick={handleLogin}
             className="bg-white/20 backdrop-blur-md border-2 border-white/40 text-white text-base sm:text-lg font-semibold px-8 sm:px-10 py-3.5 sm:py-4 rounded-full hover:bg-white/30 transition active:bg-white/40 w-full sm:w-auto min-w-[200px]"
           >
             Login
@@ -101,41 +118,54 @@ const CoverPage = () => {
       );
     }
 
-    // User is logged in - show status-based buttons
+    // User is logged in - show status-based content
     switch (verificationStatus) {
       case 'pending':
         return (
-          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 max-w-md mx-auto border border-yellow-400/30">
-            <div className="flex items-center justify-center mb-4">
-              <div className="bg-yellow-400/20 p-3 rounded-full">
-                <HiOutlineClock className="w-8 h-8 text-yellow-400" />
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 max-w-md mx-auto border border-yellow-400/30">
+            <div className="flex items-center justify-center mb-6">
+              <div className="bg-yellow-400/20 p-4 rounded-full">
+                <HiOutlineClock className="w-10 h-10 text-yellow-400" />
               </div>
             </div>
-            <h3 className="text-white text-xl font-semibold mb-2">Verification Pending</h3>
-            <p className="text-white/80 text-sm mb-4">
+            <h3 className="text-white text-2xl font-bold mb-3">Verification Pending</h3>
+            <p className="text-white/80 text-sm mb-6">
               Your student verification is currently being reviewed by our admin team.
               This usually takes 24-48 hours. You'll be notified once it's complete.
             </p>
-            <div className="bg-yellow-400/10 border border-yellow-400/30 rounded-lg p-3">
-              <p className="text-yellow-300 text-xs">
-                <span className="font-semibold">Status:</span> Under Review
-              </p>
+            <div className="bg-yellow-400/10 border border-yellow-400/30 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-yellow-300 font-medium">Status:</span>
+                <span className="text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-full text-xs font-semibold">
+                  UNDER REVIEW
+                </span>
+              </div>
+              {userName && (
+                <p className="text-white/60 text-xs mt-3 text-left">
+                  Welcome back, {userName}
+                </p>
+              )}
             </div>
           </div>
         );
 
       case 'approved':
         return (
-          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 max-w-md mx-auto border border-green-400/30">
-            <div className="flex items-center justify-center mb-4">
-              <div className="bg-green-400/20 p-3 rounded-full">
-                <HiOutlineCheckCircle className="w-8 h-8 text-green-400" />
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 max-w-md mx-auto border border-green-400/30">
+            <div className="flex items-center justify-center mb-6">
+              <div className="bg-green-400/20 p-4 rounded-full">
+                <HiOutlineCheckCircle className="w-10 h-10 text-green-400" />
               </div>
             </div>
-            <h3 className="text-white text-xl font-semibold mb-2">Verification Approved!</h3>
-            <p className="text-white/80 text-sm mb-4">
+            <h3 className="text-white text-2xl font-bold mb-3">Verification Approved!</h3>
+            <p className="text-white/80 text-sm mb-6">
               Your student status has been verified successfully. You now have access to all features.
             </p>
+            {userName && (
+              <p className="text-white/60 text-sm mb-4">
+                Welcome back, {userName}
+              </p>
+            )}
             <button 
               onClick={handleGoHome}
               className="bg-green-500 text-white text-base font-semibold px-8 py-3 rounded-full hover:bg-green-600 transition-all duration-200 hover:scale-105 w-full flex items-center justify-center gap-2"
@@ -148,16 +178,32 @@ const CoverPage = () => {
 
       case 'rejected':
         return (
-          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 max-w-md mx-auto border border-red-400/30">
-            <div className="flex items-center justify-center mb-4">
-              <div className="bg-red-400/20 p-3 rounded-full">
-                <HiOutlineXCircle className="w-8 h-8 text-red-400" />
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 max-w-md mx-auto border border-red-400/30">
+            <div className="flex items-center justify-center mb-6">
+              <div className="bg-red-400/20 p-4 rounded-full">
+                <HiOutlineXCircle className="w-10 h-10 text-red-400" />
               </div>
             </div>
-            <h3 className="text-white text-xl font-semibold mb-2">Verification Rejected</h3>
+            <h3 className="text-white text-2xl font-bold mb-3">Verification Rejected</h3>
             <p className="text-white/80 text-sm mb-4">
-              Your verification was not approved. This could be due to unclear photo or incorrect information.
-              Please try again with a clearer photo.
+              Your verification was not approved. This could be due to:
+            </p>
+            <ul className="text-white/70 text-xs mb-6 space-y-2 text-left bg-red-400/5 p-4 rounded-xl">
+              <li className="flex items-start gap-2">
+                <span className="text-red-400">•</span>
+                <span>Unclear or blurry photo of your ID</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-red-400">•</span>
+                <span>Student ID number not clearly visible</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-red-400">•</span>
+                <span>University name doesn't match our records</span>
+              </li>
+            </ul>
+            <p className="text-white/80 text-sm mb-6">
+              Please try again with a clearer photo and correct information.
             </p>
             <button 
               onClick={handleTryAgain}
@@ -170,17 +216,17 @@ const CoverPage = () => {
         );
 
       default:
-        // User logged in but no verification yet - show standard buttons
+        // User logged in but no verification yet
         return (
           <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
             <button 
-              onClick={() => navigate('/register')}
+              onClick={handleGetStarted}
               className="bg-white text-rose-600 text-base sm:text-lg font-bold px-8 sm:px-10 py-3.5 sm:py-4 rounded-full shadow-xl hover:scale-105 transition-transform duration-200 active:scale-95 w-full sm:w-auto min-w-[200px]"
             >
               Complete Verification
             </button>
             <button 
-              onClick={() => navigate('/home')}
+              onClick={handleGoHome}
               className="bg-white/20 backdrop-blur-md border-2 border-white/40 text-white text-base sm:text-lg font-semibold px-8 sm:px-10 py-3.5 sm:py-4 rounded-full hover:bg-white/30 transition active:bg-white/40 w-full sm:w-auto min-w-[200px]"
             >
               Browse as Guest
@@ -210,9 +256,10 @@ const CoverPage = () => {
         <div className="text-white text-2xl font-bold tracking-tighter drop-shadow-lg">
           MATCH<span className="text-pink-200">MAKER</span>
         </div>
-        {user && (
-          <div className="text-white/80 text-sm bg-white/10 backdrop-blur-md px-4 py-2 rounded-full">
-            Welcome, {user.email?.split('@')[0] || 'User'}
+        {userName && verificationStatus && (
+          <div className="text-white/80 text-sm bg-white/10 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2">
+            <HiOutlineUser className="w-4 h-4" />
+            <span className="max-w-[150px] truncate">{userName}</span>
           </div>
         )}
       </nav>
@@ -231,9 +278,9 @@ const CoverPage = () => {
             Your journey to a perfect partner starts with a single click.
           </p>
 
-          {/* Dynamic Buttons based on verification status */}
+          {/* Dynamic Content based on verification status */}
           <div className="mt-8">
-            {renderAuthButtons()}
+            {renderContent()}
           </div>
         </div>
       </main>
