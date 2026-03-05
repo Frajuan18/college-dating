@@ -1,7 +1,8 @@
 // components/Navbar.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { useTheme } from '../context/ThemeContext';
 import { 
   HiOutlineHeart, 
   HiOutlineUser, 
@@ -12,25 +13,40 @@ import {
   HiOutlineChat,
   HiOutlineHome,
   HiOutlineUserGroup,
-  HiOutlineCog
+  HiOutlineCog,
+  HiOutlineSun,
+  HiOutlineMoon,
+  HiOutlineChevronDown
 } from 'react-icons/hi';
 
 const Navbar = () => {
   const navigate = useNavigate();
+  const { isDark, toggleTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [user, setUser] = useState(null);
   const [userName, setUserName] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     handleScroll();
     window.addEventListener('scroll', handleScroll);
     getUserData();
     
+    // Close dropdown when clicking outside
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    
     return () => {
       window.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
 
@@ -40,7 +56,6 @@ const Navbar = () => {
 
   const getUserData = async () => {
     try {
-      // Get telegram data
       const telegramData = JSON.parse(localStorage.getItem('telegramUser') || '{}');
       const telegramId = telegramData.id || localStorage.getItem('telegramId');
       
@@ -71,6 +86,42 @@ const Navbar = () => {
     navigate('/');
   };
 
+  // Theme-based styles
+  const getNavbarStyles = () => {
+    if (scrolled) {
+      return isDark
+        ? 'bg-gray-900/95 backdrop-blur-md shadow-lg border-b border-gray-800'
+        : 'bg-white/95 backdrop-blur-md shadow-lg border-b border-gray-100';
+    }
+    return isDark
+      ? 'bg-transparent'
+      : 'bg-transparent';
+  };
+
+  const getTextStyles = () => {
+    if (scrolled) {
+      return isDark
+        ? 'text-gray-200 hover:text-white'
+        : 'text-gray-700 hover:text-rose-600';
+    }
+    return 'text-white hover:text-white/80';
+  };
+
+  const getIconStyles = () => {
+    if (scrolled) {
+      return isDark
+        ? 'text-gray-300 hover:text-white'
+        : 'text-gray-600 hover:text-rose-600';
+    }
+    return 'text-white/80 hover:text-white';
+  };
+
+  const getDropdownStyles = () => {
+    return isDark
+      ? 'bg-gray-800 border-gray-700 shadow-xl'
+      : 'bg-white border-gray-100 shadow-xl';
+  };
+
   const navLinks = [
     { name: 'Home', path: '/home', icon: HiOutlineHome },
     { name: 'Matches', path: '/matches', icon: HiOutlineHeart },
@@ -80,21 +131,19 @@ const Navbar = () => {
 
   return (
     <>
-      <nav className={`fixed w-full z-50 transition-all duration-300 ${
-        scrolled 
-          ? 'bg-white/95 backdrop-blur-md shadow-lg py-2' 
-          : 'bg-transparent py-4'
-      }`}>
+      <nav className={`fixed w-full z-50 transition-all duration-300 ${getNavbarStyles()}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center h-16">
             {/* Logo */}
             <Link 
               to="/" 
               className={`text-2xl font-bold tracking-tighter transition-colors duration-300 ${
-                scrolled ? 'text-rose-600' : 'text-white'
+                scrolled
+                  ? isDark ? 'text-white' : 'text-rose-600'
+                  : 'text-white'
               }`}
             >
-              MATCH<span className={scrolled ? 'text-pink-400' : 'text-pink-200'}>MAKER</span>
+              MATCH<span className={scrolled && !isDark ? 'text-pink-400' : 'text-pink-200'}>MAKER</span>
             </Link>
 
             {/* Desktop Navigation Links */}
@@ -105,11 +154,7 @@ const Navbar = () => {
                   <Link
                     key={link.path}
                     to={link.path}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
-                      scrolled
-                        ? 'text-gray-700 hover:bg-rose-50 hover:text-rose-600'
-                        : 'text-white/90 hover:bg-white/10 hover:text-white'
-                    }`}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 flex items-center gap-2 ${getTextStyles()}`}
                   >
                     <Icon className="w-4 h-4" />
                     {link.name}
@@ -119,14 +164,23 @@ const Navbar = () => {
             </div>
 
             {/* Desktop Right Side Icons */}
-            <div className="hidden md:flex items-center space-x-3">
+            <div className="hidden md:flex items-center space-x-2">
+              {/* Theme Toggle */}
+              <button
+                onClick={toggleTheme}
+                className={`p-2 rounded-full transition-all duration-200 ${getIconStyles()}`}
+                aria-label="Toggle theme"
+              >
+                {isDark ? (
+                  <HiOutlineSun className="w-5 h-5" />
+                ) : (
+                  <HiOutlineMoon className="w-5 h-5" />
+                )}
+              </button>
+
               {/* Notifications */}
               <button
-                className={`relative p-2 rounded-full transition-all duration-200 ${
-                  scrolled
-                    ? 'text-gray-600 hover:bg-rose-50 hover:text-rose-600'
-                    : 'text-white/80 hover:bg-white/10 hover:text-white'
-                }`}
+                className={`relative p-2 rounded-full transition-all duration-200 ${getIconStyles()}`}
                 onClick={() => navigate('/notifications')}
               >
                 <HiOutlineBell className="w-5 h-5" />
@@ -136,29 +190,38 @@ const Navbar = () => {
               </button>
 
               {/* User Menu */}
-              <div className="relative">
+              <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setShowDropdown(!showDropdown)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-full transition-all duration-200 ${
                     scrolled
-                      ? 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+                      ? isDark
+                        ? 'bg-gray-800 text-white hover:bg-gray-700'
+                        : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
                       : 'bg-white/10 text-white hover:bg-white/20'
                   }`}
                 >
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-rose-400 to-pink-500 flex items-center justify-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    isDark ? 'bg-gray-700' : 'bg-gradient-to-r from-rose-400 to-pink-500'
+                  }`}>
                     <HiOutlineUser className="w-4 h-4 text-white" />
                   </div>
                   <span className="text-sm font-medium hidden lg:block">
                     {userName || 'Profile'}
                   </span>
+                  <HiOutlineChevronDown className={`w-4 h-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Dropdown Menu */}
                 {showDropdown && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl py-2 border border-gray-100">
+                  <div className={`absolute right-0 mt-2 w-48 rounded-xl py-2 border ${getDropdownStyles()}`}>
                     <Link
                       to="/profile"
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-600 transition"
+                      className={`flex items-center gap-2 px-4 py-2 text-sm transition ${
+                        isDark
+                          ? 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                          : 'text-gray-700 hover:bg-rose-50 hover:text-rose-600'
+                      }`}
                       onClick={() => setShowDropdown(false)}
                     >
                       <HiOutlineUser className="w-4 h-4" />
@@ -166,16 +229,51 @@ const Navbar = () => {
                     </Link>
                     <Link
                       to="/settings"
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-600 transition"
+                      className={`flex items-center gap-2 px-4 py-2 text-sm transition ${
+                        isDark
+                          ? 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                          : 'text-gray-700 hover:bg-rose-50 hover:text-rose-600'
+                      }`}
                       onClick={() => setShowDropdown(false)}
                     >
                       <HiOutlineCog className="w-4 h-4" />
                       Settings
                     </Link>
-                    <hr className="my-1 border-gray-100" />
+                    
+                    {/* Theme Toggle in Dropdown */}
+                    <button
+                      onClick={() => {
+                        toggleTheme();
+                        setShowDropdown(false);
+                      }}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm w-full text-left transition ${
+                        isDark
+                          ? 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                          : 'text-gray-700 hover:bg-rose-50 hover:text-rose-600'
+                      }`}
+                    >
+                      {isDark ? (
+                        <>
+                          <HiOutlineSun className="w-4 h-4" />
+                          Light Mode
+                        </>
+                      ) : (
+                        <>
+                          <HiOutlineMoon className="w-4 h-4" />
+                          Dark Mode
+                        </>
+                      )}
+                    </button>
+                    
+                    <hr className={`my-1 ${isDark ? 'border-gray-700' : 'border-gray-100'}`} />
+                    
                     <button
                       onClick={handleLogout}
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left transition"
+                      className={`flex items-center gap-2 px-4 py-2 text-sm w-full text-left transition ${
+                        isDark
+                          ? 'text-red-400 hover:bg-gray-700 hover:text-red-300'
+                          : 'text-red-600 hover:bg-red-50'
+                      }`}
                     >
                       <HiOutlineLogout className="w-4 h-4" />
                       Logout
@@ -190,7 +288,9 @@ const Navbar = () => {
               onClick={() => setIsOpen(!isOpen)}
               className={`md:hidden p-2 rounded-lg transition-colors ${
                 scrolled
-                  ? 'text-gray-600 hover:bg-gray-100'
+                  ? isDark
+                    ? 'text-gray-300 hover:bg-gray-800'
+                    : 'text-gray-600 hover:bg-gray-100'
                   : 'text-white hover:bg-white/10'
               }`}
             >
@@ -205,24 +305,28 @@ const Navbar = () => {
 
         {/* Mobile Menu */}
         <div
-          className={`md:hidden fixed inset-x-0 top-[73px] bg-white shadow-xl transition-all duration-300 ease-in-out transform ${
+          className={`md:hidden fixed inset-x-0 top-16 transition-all duration-300 ease-in-out transform ${
             isOpen ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0 pointer-events-none'
-          }`}
-          style={{ maxHeight: 'calc(100vh - 73px)', overflowY: 'auto' }}
+          } ${isDark ? 'bg-gray-900' : 'bg-white'} shadow-xl`}
+          style={{ maxHeight: 'calc(100vh - 64px)', overflowY: 'auto' }}
         >
-          <div className="px-4 py-6 space-y-4">
+          <div className={`px-4 py-6 space-y-4 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
             {/* User Info */}
-            <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-r from-rose-400 to-pink-500 flex items-center justify-center">
+            <div className={`flex items-center gap-3 pb-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                isDark ? 'bg-gray-800' : 'bg-gradient-to-r from-rose-400 to-pink-500'
+              }`}>
                 <HiOutlineUser className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="font-medium text-gray-900">{userName || 'Guest User'}</p>
-                <p className="text-xs text-gray-500">
+                <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {userName || 'Guest User'}
+                </p>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   {user?.verification_status === 'verified' ? (
-                    <span className="text-green-600">✓ Verified</span>
+                    <span className="text-green-500">✓ Verified</span>
                   ) : (
-                    <span className="text-yellow-600">Pending verification</span>
+                    <span className="text-yellow-500">Pending verification</span>
                   )}
                 </p>
               </div>
@@ -236,7 +340,11 @@ const Navbar = () => {
                   <Link
                     key={link.path}
                     to={link.path}
-                    className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition"
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+                      isDark
+                        ? 'hover:bg-gray-800 hover:text-white'
+                        : 'hover:bg-rose-50 hover:text-rose-600'
+                    }`}
                     onClick={() => setIsOpen(false)}
                   >
                     <Icon className="w-5 h-5" />
@@ -247,10 +355,14 @@ const Navbar = () => {
             </div>
 
             {/* Additional Links */}
-            <div className="pt-4 border-t border-gray-100 space-y-1">
+            <div className={`pt-4 border-t space-y-1 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
               <Link
                 to="/profile"
-                className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition"
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+                  isDark
+                    ? 'hover:bg-gray-800 hover:text-white'
+                    : 'hover:bg-rose-50 hover:text-rose-600'
+                }`}
                 onClick={() => setIsOpen(false)}
               >
                 <HiOutlineUser className="w-5 h-5" />
@@ -258,7 +370,11 @@ const Navbar = () => {
               </Link>
               <Link
                 to="/notifications"
-                className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition"
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+                  isDark
+                    ? 'hover:bg-gray-800 hover:text-white'
+                    : 'hover:bg-rose-50 hover:text-rose-600'
+                }`}
                 onClick={() => setIsOpen(false)}
               >
                 <HiOutlineBell className="w-5 h-5" />
@@ -271,18 +387,51 @@ const Navbar = () => {
               </Link>
               <Link
                 to="/settings"
-                className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition"
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+                  isDark
+                    ? 'hover:bg-gray-800 hover:text-white'
+                    : 'hover:bg-rose-50 hover:text-rose-600'
+                }`}
                 onClick={() => setIsOpen(false)}
               >
                 <HiOutlineCog className="w-5 h-5" />
                 <span className="font-medium">Settings</span>
               </Link>
+
+              {/* Theme Toggle in Mobile Menu */}
+              <button
+                onClick={() => {
+                  toggleTheme();
+                  setIsOpen(false);
+                }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition w-full ${
+                  isDark
+                    ? 'hover:bg-gray-800 hover:text-white'
+                    : 'hover:bg-rose-50 hover:text-rose-600'
+                }`}
+              >
+                {isDark ? (
+                  <>
+                    <HiOutlineSun className="w-5 h-5" />
+                    <span className="font-medium">Light Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <HiOutlineMoon className="w-5 h-5" />
+                    <span className="font-medium">Dark Mode</span>
+                  </>
+                )}
+              </button>
             </div>
 
             {/* Logout Button */}
             <button
               onClick={handleLogout}
-              className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition w-full"
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition w-full ${
+                isDark
+                  ? 'text-red-400 hover:bg-gray-800 hover:text-red-300'
+                  : 'text-red-600 hover:bg-red-50'
+              }`}
             >
               <HiOutlineLogout className="w-5 h-5" />
               <span className="font-medium">Logout</span>
@@ -294,7 +443,9 @@ const Navbar = () => {
       {/* Overlay for mobile menu */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 md:hidden"
+          className={`fixed inset-0 z-40 md:hidden ${
+            isDark ? 'bg-black/50' : 'bg-black/20'
+          } backdrop-blur-sm`}
           onClick={() => setIsOpen(false)}
         />
       )}

@@ -1,25 +1,27 @@
-// App.js - Main routing configuration
+// App.jsx
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { ThemeProvider } from './context/ThemeContext';
 import CoverPage from './components/CoverPage';
-import Register from './components/Register';
-import Login from './components/Login';
 import Home from './pages/Home';
-import AdminDashboard from './pages/admin/AdminDashboard';
+import Register from './components/Register';
 import AdminLogin from './pages/admin/login';
+import AdminDashboard from './pages/admin/AdminDashboard';
+
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<CoverPage />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/home" element={<Home />} />
-        <Route path="/admin/login" element={<AdminLogin/>} />
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-      </Routes>
-    </Router>
+    <ThemeProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<CoverPage />} />
+          <Route path="/home" element={<Home />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
 
