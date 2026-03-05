@@ -1,5 +1,6 @@
 // components/Step3UniversityId.jsx
 import React, { useState } from "react";
+import { submitVerification } from "../services/verificationService";
 
 const Step3UniversityId = ({
   formData,
@@ -13,8 +14,6 @@ const Step3UniversityId = ({
   const [submitStatus, setSubmitStatus] = useState(null);
   const [submitMessage, setSubmitMessage] = useState("");
 
-  // In Step3UniversityId.jsx, update the handleFormSubmit:
-
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -22,56 +21,20 @@ const Step3UniversityId = ({
     setSubmitMessage("");
 
     try {
-      console.log("Form data being submitted:", formData); // Debug log
-      console.log("Telegram data:", formData.telegramData); // Debug log
+      console.log("Form data being submitted:", formData);
 
-      const formDataToSend = new FormData();
+      const result = await submitVerification(formData);
 
-      // Safely extract telegram data
-      const telegramData = formData.telegramData || {};
-
-      // Append all fields with fallbacks
-      formDataToSend.append("telegramId", telegramData.id || "");
-      formDataToSend.append("telegramUsername", telegramData.username || "");
-      formDataToSend.append("firstName", telegramData.first_name || "");
-      formDataToSend.append("lastName", telegramData.last_name || "");
-      formDataToSend.append("universityName", formData.universityName || "");
-      formDataToSend.append("studentId", formData.studentId || "");
-      formDataToSend.append("graduationYear", formData.graduationYear || "");
-      formDataToSend.append("gender", formData.gender || "");
-
-      if (formData.idPhoto) {
-        formDataToSend.append("idPhoto", formData.idPhoto);
-      }
-
-      // Log what we're sending
-      console.log("Sending to API:", {
-        telegramId: telegramData.id,
-        telegramUsername: telegramData.username,
-        firstName: telegramData.first_name,
-        lastName: telegramData.last_name,
-        university: formData.universityName,
-        studentId: formData.studentId,
-      });
-
-      const response = await fetch("/api/verify-student", {
-        method: "POST",
-        body: formDataToSend,
-      });
-
-      const data = await response.json();
-      console.log("API response:", data);
-
-      if (response.ok) {
+      if (result.success) {
         setSubmitStatus("success");
-        setSubmitMessage(data.message || "Verification request sent!");
+        setSubmitMessage(result.message);
 
         setTimeout(() => {
           window.location.href = "/";
         }, 3000);
       } else {
         setSubmitStatus("error");
-        setSubmitMessage(data.message || `Error: ${response.status}`);
+        setSubmitMessage(result.message);
       }
     } catch (error) {
       console.error("Submission error:", error);
@@ -84,6 +47,7 @@ const Step3UniversityId = ({
 
   return (
     <form onSubmit={handleFormSubmit} className="space-y-5">
+      {/* ... rest of your form JSX remains exactly the same ... */}
       <div className="text-center mb-2">
         <h2 className="text-white text-2xl font-bold mb-2">
           Verify your student status
