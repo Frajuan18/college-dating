@@ -16,12 +16,13 @@ const CoverPage = () => {
   const [verificationStatus, setVerificationStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
+  const [userId, setUserId] = useState(null);
 
   useEffect(() => {
-    checkUserVerificationStatus();
+    checkUserStatus();
   }, []);
 
-  const checkUserVerificationStatus = async () => {
+  const checkUserStatus = async () => {
     try {
       // Get telegram data from localStorage (saved during registration)
       const telegramData = JSON.parse(localStorage.getItem('telegramUser') || '{}');
@@ -35,43 +36,31 @@ const CoverPage = () => {
 
       console.log('Checking status for telegram ID:', telegramId);
 
-      // First get the user from users table using telegram_id
+      // Get user from users table using telegram_id
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('id, first_name, last_name')
+        .select('id, first_name, last_name, verification_status')
         .eq('telegram_id', telegramId)
         .maybeSingle();
 
       if (userError) throw userError;
 
       if (userData) {
+        console.log('User found:', userData);
+        setUserId(userData.id);
         setUserName(`${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'User');
-        
-        // Then get the latest verification from student_verifications table
-        const { data: verifications, error: verifError } = await supabase
-          .from('student_verifications')
-          .select('status, submitted_at')
-          .eq('user_id', userData.id)
-          .order('submitted_at', { ascending: false })
-          .limit(1);
-
-        if (verifError) throw verifError;
-
-        if (verifications && verifications.length > 0) {
-          console.log('Found verification:', verifications[0]);
-          setVerificationStatus(verifications[0].status);
-        }
+        setVerificationStatus(userData.verification_status);
+      } else {
+        console.log('No user found with telegram ID:', telegramId);
       }
     } catch (error) {
-      console.error('Error checking verification status:', error);
+      console.error('Error checking user status:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleTryAgain = () => {
-    // Clear any existing verification data and go to register
-    localStorage.removeItem('verificationInProgress');
     navigate('/register');
   };
 
@@ -118,7 +107,7 @@ const CoverPage = () => {
       );
     }
 
-    // User is logged in - show status-based content
+    // User is logged in - show status-based content from users table
     switch (verificationStatus) {
       case 'pending':
         return (
@@ -146,10 +135,11 @@ const CoverPage = () => {
                 </p>
               )}
             </div>
+            {/* No button for pending - user stays on cover page */}
           </div>
         );
 
-      case 'approved':
+      case 'verified':
         return (
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 max-w-md mx-auto border border-green-400/30">
             <div className="flex items-center justify-center mb-6">
@@ -216,7 +206,7 @@ const CoverPage = () => {
         );
 
       default:
-        // User logged in but no verification yet
+        // User logged in but no verification status (null or undefined)
         return (
           <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
             <button 
@@ -260,6 +250,11 @@ const CoverPage = () => {
           <div className="text-white/80 text-sm bg-white/10 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2">
             <HiOutlineUser className="w-4 h-4" />
             <span className="max-w-[150px] truncate">{userName}</span>
+            {verificationStatus === 'verified' && (
+              <span className="bg-green-500/20 text-green-300 text-xs px-2 py-0.5 rounded-full">
+                ✓ Verified
+              </span>
+            )}
           </div>
         )}
       </nav>
@@ -278,7 +273,7 @@ const CoverPage = () => {
             Your journey to a perfect partner starts with a single click.
           </p>
 
-          {/* Dynamic Content based on verification status */}
+          {/* Dynamic Content based on verification status from users table */}
           <div className="mt-8">
             {renderContent()}
           </div>
