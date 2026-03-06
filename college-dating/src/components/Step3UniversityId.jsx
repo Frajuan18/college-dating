@@ -1,5 +1,5 @@
 // components/Step3UniversityId.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 const Step3UniversityId = ({
@@ -13,64 +13,6 @@ const Step3UniversityId = ({
   const [submitStatus, setSubmitStatus] = useState(null);
   const [submitMessage, setSubmitMessage] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [verificationStatus, setVerificationStatus] = useState(null);
-  const [checkingStatus, setCheckingStatus] = useState(true);
-
-  // Check if user already has a verification status
-  useEffect(() => {
-    checkUserVerificationStatus();
-  }, []);
-
-  const checkUserVerificationStatus = async () => {
-    try {
-      const telegramData = formData.telegramData || {};
-      const telegramId = telegramData.id || formData.telegramId;
-      
-      if (!telegramId) {
-        setCheckingStatus(false);
-        return;
-      }
-
-      // Check if user exists
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('telegram_id', telegramId)
-        .maybeSingle();
-
-      if (userError) throw userError;
-
-      if (user) {
-        // Check if user has any verifications
-        const { data: verifications, error: verifError } = await supabase
-          .from('student_verifications')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('submitted_at', { ascending: false })
-          .limit(1);
-
-        if (verifError) throw verifError;
-
-        if (verifications && verifications.length > 0) {
-          const latestVerification = verifications[0];
-          setVerificationStatus(latestVerification.status);
-
-          // If already approved, redirect to home
-          if (latestVerification.status === 'approved') {
-            setTimeout(() => {
-              window.location.href = "/home";
-            }, 2000);
-          }
-          // If rejected, show message but don't redirect automatically
-          // User can try again
-        }
-      }
-    } catch (error) {
-      console.error("Error checking status:", error);
-    } finally {
-      setCheckingStatus(false);
-    }
-  };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
@@ -91,10 +33,24 @@ const Step3UniversityId = ({
       }
 
       // Validate required fields
-      if (!formData.universityName || !formData.studentId || !formData.graduationYear || !formData.gender) {
-        throw new Error("Please fill all required fields");
+      if (!formData.fullName) {
+        throw new Error("Please enter your full name");
       }
-
+      if (!formData.universityName) {
+        throw new Error("Please enter your university name");
+      }
+      if (!formData.department) {
+        throw new Error("Please enter your department");
+      }
+      if (!formData.studentYear) {
+        throw new Error("Please select your year of study");
+      }
+      if (!formData.studentId) {
+        throw new Error("Please enter your student ID");
+      }
+      if (!formData.gender) {
+        throw new Error("Please select your gender");
+      }
       if (!formData.idPhoto) {
         throw new Error("Please upload your university ID photo");
       }
@@ -114,14 +70,20 @@ const Step3UniversityId = ({
       if (!user) {
         setSubmitMessage("Creating user account...");
         
-        // Create new user
+        // Create new user with all the new fields
         const userData = {
           telegram_id: telegramId,
           telegram_username: telegramData.username || formData.telegramUsername || null,
-          first_name: telegramData.first_name || formData.firstName || 'Unknown',
-          last_name: telegramData.last_name || formData.lastName || '',
+          first_name: formData.fullName?.split(' ')[0] || 'Unknown',
+          last_name: formData.fullName?.split(' ').slice(1).join(' ') || '',
+          full_name: formData.fullName,
           photo_url: telegramData.photo_url || null,
-          verification_status: 'pending'
+          verification_status: 'pending',
+          university_name: formData.universityName,
+          department: formData.department,
+          student_year: formData.studentYear,
+          student_id: formData.studentId,
+          gender: formData.gender
         };
 
         const { data: newUser, error: createError } = await supabase
@@ -133,11 +95,26 @@ const Step3UniversityId = ({
         if (createError) throw createError;
         user = newUser;
       } else {
-        // Update existing user status to pending
-        await supabase
+        // Update existing user with new information
+        setSubmitMessage("Updating user information...");
+        
+        const { error: updateError } = await supabase
           .from('users')
-          .update({ verification_status: 'pending' })
+          .update({
+            full_name: formData.fullName,
+            first_name: formData.fullName?.split(' ')[0] || user.first_name,
+            last_name: formData.fullName?.split(' ').slice(1).join(' ') || user.last_name,
+            university_name: formData.universityName,
+            department: formData.department,
+            student_year: formData.studentYear,
+            student_id: formData.studentId,
+            gender: formData.gender,
+            verification_status: 'pending',
+            updated_at: new Date().toISOString()
+          })
           .eq('id', user.id);
+
+        if (updateError) throw updateError;
       }
 
       setUploadProgress(30);
@@ -172,14 +149,16 @@ const Step3UniversityId = ({
 
       console.log("Image uploaded, public URL:", publicUrl);
 
-      // 3. Create verification record
+      // 3. Create verification record with all details
       setSubmitMessage("Saving verification data...");
       
       const verificationData = {
         user_id: user.id,
+        full_name: formData.fullName,
         university_name: formData.universityName,
+        department: formData.department,
+        student_year: formData.studentYear,
         student_id: formData.studentId,
-        graduation_year: parseInt(formData.graduationYear),
         gender: formData.gender,
         id_photo_url: publicUrl,
         id_photo_path: fileName,
@@ -205,10 +184,13 @@ const Step3UniversityId = ({
       setUploadProgress(100);
 
       console.log("Verification created:", verification);
-      
-      setVerificationStatus('pending');
-      setSubmitStatus("pending");
-      setSubmitMessage("Your verification has been submitted and is pending admin review.");
+
+      setSubmitStatus("success");
+      setSubmitMessage("Verification submitted successfully! Your ID will be reviewed by admin.");
+
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 3000);
 
     } catch (error) {
       console.error("Submission error:", error);
@@ -224,134 +206,20 @@ const Step3UniversityId = ({
   const onFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Check file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         alert("File too large. Maximum size is 5MB");
         return;
       }
       
-      // Check file type
       if (!file.type.startsWith('image/')) {
         alert("Please upload an image file");
         return;
       }
 
-      // Pass to parent's handler
       handleFileUpload("idPhoto", e);
     }
   };
 
-  // Show loading while checking status
-  if (checkingStatus) {
-    return (
-      <div className="text-center py-12">
-        <div className="inline-block h-8 w-8 border-4 border-pink-200 border-t-transparent animate-spin rounded-full"></div>
-        <p className="text-white mt-4">Checking verification status...</p>
-      </div>
-    );
-  }
-
-  // Show pending status
-  if (verificationStatus === 'pending' || submitStatus === 'pending') {
-    return (
-      <div className="space-y-5 text-center">
-        <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-8">
-          <svg
-            className="w-16 h-16 text-yellow-400 mx-auto mb-4"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <h2 className="text-2xl font-bold text-white mb-2">Verification Pending</h2>
-          <p className="text-yellow-200 mb-4">
-            {submitMessage || "Your verification is currently being reviewed by our admin team."}
-          </p>
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 max-w-md mx-auto">
-            <p className="text-yellow-100 text-sm">
-              <strong>What happens next?</strong><br />
-              • An admin will review your university ID<br />
-              • You'll be notified once the review is complete<br />
-              • This usually takes 24-48 hours<br />
-              • You can close this page and check back later
-            </p>
-          </div>
-          
-        </div>
-      </div>
-    );
-  }
-
-  // Show approved status
-  if (verificationStatus === 'approved') {
-    return (
-      <div className="space-y-5 text-center">
-        <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-8">
-          <svg
-            className="w-16 h-16 text-green-400 mx-auto mb-4"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <h2 className="text-2xl font-bold text-white mb-2">Verification Approved!</h2>
-          <p className="text-green-200 mb-4">
-            Your student status has been verified successfully.
-          </p>
-          <p className="text-green-300 text-sm mb-6">
-            Redirecting you to the home page...
-          </p>
-          <div className="w-full bg-white/20 rounded-full h-2 max-w-md mx-auto">
-            <div className="bg-green-400 h-2 rounded-full animate-pulse"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show rejected status
-  if (verificationStatus === 'rejected') {
-    return (
-      <div className="space-y-5">
-        <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-8 text-center">
-          <svg
-            className="w-16 h-16 text-red-400 mx-auto mb-4"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <h2 className="text-2xl font-bold text-white mb-2">Verification Rejected</h2>
-          <p className="text-red-200 mb-4">
-            Your verification was not approved. Please try again with a clearer photo.
-          </p>
-          <button
-            onClick={() => {
-              setVerificationStatus(null);
-              setSubmitStatus(null);
-            }}
-            className="bg-white text-red-600 px-6 py-2 rounded-lg font-medium hover:bg-red-50 transition"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Show the form (default state)
   return (
     <form onSubmit={handleFormSubmit} className="space-y-5">
       <div className="text-center mb-2">
@@ -379,7 +247,7 @@ const Step3UniversityId = ({
           </svg>
           <p className="text-green-200 font-medium">{submitMessage}</p>
           <p className="text-green-300/70 text-sm mt-2">
-            Redirecting...
+            Redirecting to home page...
           </p>
         </div>
       )}
@@ -414,11 +282,32 @@ const Step3UniversityId = ({
       )}
 
       {/* Form Fields */}
-      {submitStatus !== "success" && submitStatus !== "pending" && (
+      {submitStatus !== "success" && (
         <>
+          {/* Full Name Field */}
           <div>
             <label className="block text-white font-medium mb-1 drop-shadow">
-              University Name
+              Full Name <span className="text-pink-200">*</span>
+            </label>
+            <input
+              type="text"
+              name="fullName"
+              value={formData.fullName || ''}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 rounded-lg bg-white/10 border-2 border-white/30 text-white placeholder-white/50 focus:outline-none focus:border-pink-200 transition"
+              placeholder="e.g., John Doe"
+              disabled={isSubmitting}
+              required
+            />
+            {errors.fullName && (
+              <p className="mt-1 text-sm text-pink-200">{errors.fullName}</p>
+            )}
+          </div>
+
+          {/* University Name */}
+          <div>
+            <label className="block text-white font-medium mb-1 drop-shadow">
+              University Name <span className="text-pink-200">*</span>
             </label>
             <input
               type="text"
@@ -431,15 +320,61 @@ const Step3UniversityId = ({
               required
             />
             {errors.universityName && (
-              <p className="mt-1 text-sm text-pink-200">
-                {errors.universityName}
-              </p>
+              <p className="mt-1 text-sm text-pink-200">{errors.universityName}</p>
             )}
           </div>
 
+          {/* Department Field */}
           <div>
             <label className="block text-white font-medium mb-1 drop-shadow">
-              Student ID Number
+              Department / Major <span className="text-pink-200">*</span>
+            </label>
+            <input
+              type="text"
+              name="department"
+              value={formData.department || ''}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 rounded-lg bg-white/10 border-2 border-white/30 text-white placeholder-white/50 focus:outline-none focus:border-pink-200 transition"
+              placeholder="e.g., Computer Science"
+              disabled={isSubmitting}
+              required
+            />
+            {errors.department && (
+              <p className="mt-1 text-sm text-pink-200">{errors.department}</p>
+            )}
+          </div>
+
+          {/* Year of Study */}
+          <div>
+            <label className="block text-white font-medium mb-1 drop-shadow">
+              Year of Study <span className="text-pink-200">*</span>
+            </label>
+            <select
+              name="studentYear"
+              value={formData.studentYear || ''}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 rounded-lg bg-white/10 border-2 border-white/30 text-white [color-scheme:dark] focus:outline-none focus:border-pink-200 transition"
+              disabled={isSubmitting}
+              required
+            >
+              <option value="">Select year</option>
+              <option value="1st Year">1st Year</option>
+              <option value="2nd Year">2nd Year</option>
+              <option value="3rd Year">3rd Year</option>
+              <option value="4th Year">4th Year</option>
+              <option value="5th Year">5th Year</option>
+              <option value="Graduate">Graduate Student</option>
+              <option value="PhD">PhD Student</option>
+            </select>
+            {errors.studentYear && (
+              <p className="mt-1 text-sm text-pink-200">{errors.studentYear}</p>
+            )}
+          </div>
+
+          {/* Student ID Number */}
+          <div>
+            <label className="block text-white font-medium mb-1 drop-shadow">
+              Student ID Number <span className="text-pink-200">*</span>
             </label>
             <input
               type="text"
@@ -456,35 +391,10 @@ const Step3UniversityId = ({
             )}
           </div>
 
+          {/* University ID Photo */}
           <div>
             <label className="block text-white font-medium mb-1 drop-shadow">
-              Graduation Year
-            </label>
-            <select
-              name="graduationYear"
-              value={formData.graduationYear}
-              onChange={handleChange}
-              className="w-full px-4 py-2.5 rounded-lg bg-white/10 border-2 border-white/30 text-white [color-scheme:dark] focus:outline-none focus:border-pink-200 transition"
-              disabled={isSubmitting}
-              required
-            >
-              <option value="">Select year</option>
-              {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-            {errors.graduationYear && (
-              <p className="mt-1 text-sm text-pink-200">
-                {errors.graduationYear}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-white font-medium mb-1 drop-shadow">
-              University ID Photo
+              University ID Photo <span className="text-pink-200">*</span>
             </label>
             <div
               className={`border-2 border-dashed border-white/30 rounded-lg p-6 text-center hover:border-pink-200 transition cursor-pointer ${

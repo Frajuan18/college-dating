@@ -11,9 +11,6 @@ import {
   HiOutlineSparkles,
   HiOutlineLocationMarker,
   HiOutlineAcademicCap,
-  HiOutlineBriefcase,
-  HiOutlineCamera,
-  HiOutlineBookOpen,
   HiOutlineFire,
   HiOutlineStar,
   HiOutlineTrendingUp,
@@ -24,14 +21,14 @@ const Home = () => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
   const [currentUser, setCurrentUser] = useState(null);
-  const [potentialMatches, setPotentialMatches] = useState([]);
-  const [trendingUsers, setTrendingUsers] = useState([]);
-  const [nearbyUsers, setNearbyUsers] = useState([]);
+  const [oppositeGenderUsers, setOppositeGenderUsers] = useState([]);
+  const [trendingOppositeGender, setTrendingOppositeGender] = useState([]);
+  const [nearbyOppositeGender, setNearbyOppositeGender] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
-    totalUsers: 0,
-    oppositeGenderCount: 0,
-    totalUniversities: 0
+    totalOpposite: 0,
+    onlineNow: 0,
+    newToday: 0
   });
 
   useEffect(() => {
@@ -48,6 +45,7 @@ const Home = () => {
         return;
       }
 
+      // Fetch current user
       const { data: user, error: userError } = await supabase
         .from('users')
         .select('*')
@@ -58,11 +56,9 @@ const Home = () => {
       
       setCurrentUser(user);
       
-      await fetchPotentialMatches(user);
-      await fetchTrendingUsers(user);
-      await fetchNearbyUsers(user);
-      await fetchStats(user);
-
+      // Fetch all opposite gender users
+      await fetchOppositeGenderUsers(user);
+      
     } catch (error) {
       console.error('Error fetching user:', error);
     } finally {
@@ -70,10 +66,14 @@ const Home = () => {
     }
   };
 
-  const fetchPotentialMatches = async (user) => {
+  const fetchOppositeGenderUsers = async (user) => {
     try {
+      // Determine opposite gender
       const oppositeGender = user.gender === 'male' ? 'female' : 'male';
       
+      console.log(`Current user gender: ${user.gender}, fetching: ${oppositeGender}`);
+      
+      // Fetch ALL opposite gender verified users
       const { data, error, count } = await supabase
         .from('users')
         .select(`
@@ -88,122 +88,60 @@ const Home = () => {
           graduation_year,
           interests,
           bio,
-          location
+          location,
+          created_at
         `, { count: 'exact' })
         .eq('gender', oppositeGender)
         .eq('verification_status', 'verified')
         .neq('telegram_id', user.telegram_id)
-        .limit(12);
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-      
-      const formattedMatches = data.map(match => ({
+
+      console.log(`Found ${data.length} ${oppositeGender} users`);
+
+      // Format all users for main display
+      const formattedUsers = data.map(match => ({
         id: match.id,
         name: `${match.first_name || ''} ${match.last_name || ''}`.trim() || 'User',
         age: calculateAge(match.graduation_year),
-        university: match.university_name || 'University not specified',
-        image: match.photo_url || 'https://images.unsplash.com/photo-1494790108777-406d7f1f3a9f?w=400',
+        university: match.university_name || 'University',
+        image: match.photo_url || (match.gender === 'female' 
+          ? 'https://images.unsplash.com/photo-1494790108777-406d7f1f3a9f?w=400'
+          : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400'),
         interests: match.interests || ['Student', 'Friendly'],
         verified: match.verification_status === 'verified',
-        bio: match.bio || 'Looking to connect with fellow students',
-        location: match.location || 'On Campus'
+        location: match.location || 'On Campus',
+        isNew: isNewUser(match.created_at)
       }));
 
-      setPotentialMatches(formattedMatches);
-    } catch (error) {
-      console.error('Error fetching matches:', error);
-    }
-  };
+      setOppositeGenderUsers(formattedUsers);
 
-  const fetchTrendingUsers = async (user) => {
-    try {
-      const oppositeGender = user.gender === 'male' ? 'female' : 'male';
-      
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, photo_url, university_name')
-        .eq('gender', oppositeGender)
-        .eq('verification_status', 'verified')
-        .neq('telegram_id', user.telegram_id)
-        .order('created_at', { ascending: false })
-        .limit(6);
+      // Set trending (random selection for variety)
+      const shuffled = [...formattedUsers].sort(() => 0.5 - Math.random());
+      setTrendingOppositeGender(shuffled.slice(0, 6));
 
-      if (error) throw error;
+      // Set nearby (random selection)
+      setNearbyOppositeGender(shuffled.slice(0, 4));
 
-      const formattedTrending = data.map(user => ({
-        id: user.id,
-        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'User',
-        university: user.university_name || 'University',
-        image: user.photo_url || 'https://images.unsplash.com/photo-1494790108777-406d7f1f3a9f?w=400',
-        likes: Math.floor(Math.random() * 200) + 50
-      }));
-
-      setTrendingUsers(formattedTrending);
-    } catch (error) {
-      console.error('Error fetching trending:', error);
-    }
-  };
-
-  const fetchNearbyUsers = async (user) => {
-    try {
-      const oppositeGender = user.gender === 'male' ? 'female' : 'male';
-      
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, photo_url, university_name, location')
-        .eq('gender', oppositeGender)
-        .eq('verification_status', 'verified')
-        .neq('telegram_id', user.telegram_id)
-        .limit(4);
-
-      if (error) throw error;
-
-      const formattedNearby = data.map(user => ({
-        id: user.id,
-        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'User',
-        university: user.university_name || 'University',
-        image: user.photo_url || 'https://images.unsplash.com/photo-1494790108777-406d7f1f3a9f?w=400',
-        distance: Math.floor(Math.random() * 5) + 1 + ' miles away'
-      }));
-
-      setNearbyUsers(formattedNearby);
-    } catch (error) {
-      console.error('Error fetching nearby:', error);
-    }
-  };
-
-  const fetchStats = async (user) => {
-    try {
-      const oppositeGender = user.gender === 'male' ? 'female' : 'male';
-      
-      const { count: totalUsers } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('verification_status', 'verified');
-
-      const { count: oppositeGenderCount } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('gender', oppositeGender)
-        .eq('verification_status', 'verified');
-
-      const { data: universities } = await supabase
-        .from('users')
-        .select('university_name')
-        .eq('verification_status', 'verified')
-        .not('university_name', 'is', null);
-
-      const uniqueUniversities = [...new Set(universities?.map(u => u.university_name) || [])].length;
-
+      // Update stats
       setStats({
-        totalUsers: totalUsers || 0,
-        oppositeGenderCount: oppositeGenderCount || 0,
-        totalUniversities: uniqueUniversities || 0
+        totalOpposite: count || 0,
+        onlineNow: Math.floor(count * 0.3), // 30% online estimate
+        newToday: formattedUsers.filter(u => u.isNew).length
       });
 
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error('Error fetching opposite gender users:', error);
     }
+  };
+
+  const isNewUser = (createdAt) => {
+    if (!createdAt) return false;
+    const created = new Date(createdAt);
+    const now = new Date();
+    const diffDays = Math.floor((now - created) / (1000 * 60 * 60 * 24));
+    return diffDays < 7;
   };
 
   const calculateAge = (graduationYear) => {
@@ -252,20 +190,20 @@ const Home = () => {
         {/* Hero Section */}
         <div className="mb-10">
           <h1 className={`text-4xl md:text-5xl font-bold mb-4 ${getTextStyles()}`}>
-            Welcome back, <span className="text-rose-500">{currentUser?.first_name || 'User'}</span>
+            Hello, <span className="text-rose-500">{currentUser?.first_name || 'User'}</span>
           </h1>
           <p className={`text-lg max-w-2xl ${getSubtextStyles()}`}>
-            Discover {stats.oppositeGenderCount} verified {genderText.toLowerCase()} students near you.
+            Discover {stats.totalOpposite} verified {genderText.toLowerCase()} near you.
           </p>
         </div>
 
-        {/* Stats Bar */}
+        {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
           {[
-            { label: 'Total Students', value: stats.totalUsers.toLocaleString(), icon: HiOutlineUserGroup },
-            { label: genderText, value: stats.oppositeGenderCount.toLocaleString(), icon: HiOutlineHeart },
-            { label: 'Universities', value: stats.totalUniversities, icon: HiOutlineAcademicCap },
-            { label: 'Your Match %', value: '87%', icon: HiOutlineSparkles },
+            { label: genderText, value: stats.totalOpposite, icon: HiOutlineUserGroup },
+            { label: 'Online Now', value: stats.onlineNow, icon: HiOutlineHeart },
+            { label: 'New Today', value: stats.newToday, icon: HiOutlineSparkles },
+            { label: 'Your Type', value: '100%', icon: HiOutlineUser },
           ].map((stat, index) => {
             const Icon = stat.icon;
             return (
@@ -283,43 +221,67 @@ const Home = () => {
           })}
         </div>
 
-        {/* Potential Matches Section */}
+        {/* ALL Opposite Gender Users Section */}
         <section className="mb-12">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
               <HiOutlineHeart className={`w-6 h-6 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
               <h2 className={`text-2xl font-bold ${getTextStyles()}`}>
-                {genderText} Near You
+                All {genderText}
               </h2>
             </div>
-            <button className={`text-sm font-medium flex items-center gap-1 ${
-              isDark ? 'text-rose-400 hover:text-rose-300' : 'text-rose-500 hover:text-rose-600'
-            }`}>
-              View All <HiOutlineTrendingUp className="w-4 h-4" />
-            </button>
+            <span className={`text-sm ${getSubtextStyles()}`}>
+              {oppositeGenderUsers.length} profiles
+            </span>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {potentialMatches.slice(0, 4).map((user) => (
+            {oppositeGenderUsers.map((user) => (
               <div
                 key={user.id}
                 className={`rounded-2xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] cursor-pointer ${getCardStyles()}`}
                 onClick={() => navigate(`/profile/${user.id}`)}
               >
                 <div className="relative">
-                  <img src={user.image} alt={user.name} className="w-full h-56 object-cover" />
+                  <img src={user.image} alt={user.name} className="w-full h-64 object-cover" />
                   {user.verified && (
                     <div className="absolute top-3 left-3 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
                       ✓ Verified
                     </div>
                   )}
+                  {user.isNew && (
+                    <div className="absolute top-3 right-3 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                      NEW
+                    </div>
+                  )}
                 </div>
                 <div className="p-5">
-                  <h3 className={`text-lg font-semibold mb-1 ${getTextStyles()}`}>{user.name}</h3>
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className={`text-lg font-semibold ${getTextStyles()}`}>{user.name}</h3>
+                    <span className={`text-sm ${getSubtextStyles()}`}>{user.age}</span>
+                  </div>
                   <p className={`text-sm mb-2 flex items-center gap-1 ${getSubtextStyles()}`}>
                     <HiOutlineAcademicCap className="w-4 h-4" />
                     {user.university}
                   </p>
+                  <p className={`text-xs mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
+                    <HiOutlineLocationMarker className="w-3 h-3" />
+                    {user.location}
+                  </p>
+                  <div className="flex flex-wrap gap-1 mb-4">
+                    {user.interests.slice(0, 2).map((interest, i) => (
+                      <span
+                        key={i}
+                        className={`text-xs px-2 py-1 rounded-full ${
+                          isDark 
+                            ? 'bg-gray-700 text-gray-300' 
+                            : 'bg-rose-50 text-rose-600'
+                        }`}
+                      >
+                        {interest}
+                      </span>
+                    ))}
+                  </div>
                   <button className={`w-full py-2 rounded-xl font-medium transition ${
                     isDark 
                       ? 'bg-rose-600 hover:bg-rose-700 text-white' 
@@ -333,83 +295,83 @@ const Home = () => {
           </div>
         </section>
 
-        {/* Trending Now Section */}
-        <section className="mb-12">
-          <div className="flex items-center gap-2 mb-6">
-            <HiOutlineFire className={`w-6 h-6 ${isDark ? 'text-orange-400' : 'text-orange-500'}`} />
-            <h2 className={`text-2xl font-bold ${getTextStyles()}`}>Popular {genderText}</h2>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {trendingUsers.map((user) => (
-              <div
-                key={user.id}
-                className={`rounded-2xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] cursor-pointer ${getCardStyles()}`}
-                onClick={() => navigate(`/profile/${user.id}`)}
-              >
-                <div className="relative">
-                  <img src={user.image} alt={user.name} className="w-full h-48 object-cover" />
-                  <div className="absolute top-3 right-3 bg-rose-500 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
-                    <HiOutlineHeart className="w-3 h-3" />
-                    {user.likes}
+        {/* Trending Section */}
+        {trendingOppositeGender.length > 0 && (
+          <section className="mb-12">
+            <div className="flex items-center gap-2 mb-6">
+              <HiOutlineFire className={`w-6 h-6 ${isDark ? 'text-orange-400' : 'text-orange-500'}`} />
+              <h2 className={`text-2xl font-bold ${getTextStyles()}`}>Popular {genderText}</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {trendingOppositeGender.map((user) => (
+                <div
+                  key={user.id}
+                  className={`rounded-2xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] cursor-pointer ${getCardStyles()}`}
+                  onClick={() => navigate(`/profile/${user.id}`)}
+                >
+                  <div className="relative">
+                    <img src={user.image} alt={user.name} className="w-full h-48 object-cover" />
+                  </div>
+                  <div className="p-5">
+                    <h3 className={`text-lg font-semibold mb-2 ${getTextStyles()}`}>{user.name}</h3>
+                    <p className={`text-sm mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
+                      <HiOutlineAcademicCap className="w-4 h-4" />
+                      {user.university}
+                    </p>
+                    <button className={`w-full py-2 rounded-xl font-medium transition ${
+                      isDark 
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white' 
+                        : 'bg-rose-500 hover:bg-rose-600 text-white'
+                    }`}>
+                      View Profile
+                    </button>
                   </div>
                 </div>
-                <div className="p-5">
-                  <h3 className={`text-lg font-semibold mb-2 ${getTextStyles()}`}>{user.name}</h3>
-                  <p className={`text-sm mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
-                    <HiOutlineAcademicCap className="w-4 h-4" />
-                    {user.university}
-                  </p>
-                  <button className={`w-full py-2 rounded-xl font-medium transition ${
-                    isDark 
-                      ? 'bg-rose-600 hover:bg-rose-700 text-white' 
-                      : 'bg-rose-500 hover:bg-rose-600 text-white'
-                  }`}>
-                    View Profile
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Nearby Section */}
-        <section className="mb-12">
-          <div className="flex items-center gap-2 mb-6">
-            <HiOutlineLocationMarker className={`w-6 h-6 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-            <h2 className={`text-2xl font-bold ${getTextStyles()}`}>{genderText} Nearby</h2>
-          </div>
+        {nearbyOppositeGender.length > 0 && (
+          <section className="mb-12">
+            <div className="flex items-center gap-2 mb-6">
+              <HiOutlineLocationMarker className={`w-6 h-6 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
+              <h2 className={`text-2xl font-bold ${getTextStyles()}`}>{genderText} Nearby</h2>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {nearbyUsers.map((user) => (
-              <div
-                key={user.id}
-                className={`flex items-center gap-4 rounded-2xl shadow-lg p-4 transition-all duration-300 hover:shadow-xl cursor-pointer ${getCardStyles()}`}
-                onClick={() => navigate(`/profile/${user.id}`)}
-              >
-                <img src={user.image} alt={user.name} className="w-20 h-20 rounded-xl object-cover" />
-                <div className="flex-1">
-                  <h3 className={`font-semibold ${getTextStyles()}`}>{user.name}</h3>
-                  <p className={`text-sm mb-1 flex items-center gap-1 ${getSubtextStyles()}`}>
-                    <HiOutlineAcademicCap className="w-4 h-4" />
-                    {user.university}
-                  </p>
-                  <p className={`text-xs flex items-center gap-1 ${getSubtextStyles()}`}>
-                    <HiOutlineLocationMarker className="w-3 h-3" />
-                    {user.distance}
-                  </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {nearbyOppositeGender.map((user) => (
+                <div
+                  key={user.id}
+                  className={`flex items-center gap-4 rounded-2xl shadow-lg p-4 transition-all duration-300 hover:shadow-xl cursor-pointer ${getCardStyles()}`}
+                  onClick={() => navigate(`/profile/${user.id}`)}
+                >
+                  <img src={user.image} alt={user.name} className="w-20 h-20 rounded-xl object-cover" />
+                  <div className="flex-1">
+                    <h3 className={`font-semibold ${getTextStyles()}`}>{user.name}</h3>
+                    <p className={`text-sm mb-1 flex items-center gap-1 ${getSubtextStyles()}`}>
+                      <HiOutlineAcademicCap className="w-4 h-4" />
+                      {user.university}
+                    </p>
+                    <p className={`text-xs flex items-center gap-1 ${getSubtextStyles()}`}>
+                      <HiOutlineLocationMarker className="w-3 h-3" />
+                      {user.location}
+                    </p>
+                  </div>
+                  <button className={`p-2 rounded-full transition ${
+                    isDark 
+                      ? 'hover:bg-gray-700 text-rose-400' 
+                      : 'hover:bg-rose-50 text-rose-500'
+                  }`}>
+                    <HiOutlineHeart className="w-5 h-5" />
+                  </button>
                 </div>
-                <button className={`p-2 rounded-full transition ${
-                  isDark 
-                    ? 'hover:bg-gray-700 text-rose-400' 
-                    : 'hover:bg-rose-50 text-rose-500'
-                }`}>
-                  <HiOutlineHeart className="w-5 h-5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );
