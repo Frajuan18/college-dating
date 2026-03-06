@@ -8,6 +8,7 @@ import Register from './components/Register';
 import AdminLogin from './pages/admin/login';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import MyProfile from './pages/MyProfile';
+import Login from './components/Login';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Routes>
           <Route path="/" element={<CoverPage />} />
           <Route path="/home" element={<Home />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
