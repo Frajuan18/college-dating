@@ -47,9 +47,13 @@ const Login = () => {
       else {
         const storedTelegramUser = localStorage.getItem('telegramUser');
         if (storedTelegramUser) {
-          telegramUserData = JSON.parse(storedTelegramUser);
-          telegramId = telegramUserData.id || localStorage.getItem('telegramId');
-          console.log('Detected Telegram user from localStorage:', telegramUserData);
+          try {
+            telegramUserData = JSON.parse(storedTelegramUser);
+            telegramId = telegramUserData.id || localStorage.getItem('telegramId');
+            console.log('Detected Telegram user from localStorage:', telegramUserData);
+          } catch (e) {
+            console.error('Error parsing stored telegram user:', e);
+          }
         }
       }
 
@@ -115,9 +119,13 @@ const Login = () => {
 
   const handleLogin = () => {
     try {
-      if (!user) return;
+      if (!user) {
+        console.error('No user data available for login');
+        return;
+      }
       
       setIsLoggingIn(true);
+      console.log('Starting login process for user:', user);
 
       // Save complete user data to localStorage
       const userData = {
@@ -143,14 +151,21 @@ const Login = () => {
         updated_at: user.updated_at
       };
 
+      console.log('Saving user data to localStorage:', userData);
+      
+      // Save to localStorage
       localStorage.setItem('telegramUser', JSON.stringify(userData));
       localStorage.setItem('telegramId', user.telegram_id);
       localStorage.setItem('lastUser', JSON.stringify(userData));
       
       console.log('Logged in as:', userData.full_name || userData.first_name);
       
-      // Navigate to home page
-      navigate('/home');
+      // Small delay to ensure localStorage is updated
+      setTimeout(() => {
+        console.log('Navigating to /home...');
+        // Navigate to home page
+        navigate('/home', { replace: true });
+      }, 100);
       
     } catch (err) {
       console.error('Login error:', err);
