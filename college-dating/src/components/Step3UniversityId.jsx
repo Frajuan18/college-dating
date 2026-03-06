@@ -48,14 +48,11 @@ const Step3UniversityId = ({
       if (!formData.studentId) {
         throw new Error("Please enter your student ID");
       }
-      if (!formData.gender) {
-        throw new Error("Please select your gender");
-      }
       if (!formData.idPhoto) {
         throw new Error("Please upload your university ID photo");
       }
 
-      // 1. First, check if user exists or create new user
+      // 1. First, check if user exists in users table
       setUploadProgress(10);
       setSubmitMessage("Checking user information...");
       
@@ -67,10 +64,10 @@ const Step3UniversityId = ({
 
       if (userError) throw userError;
 
+      // If user doesn't exist, create basic user profile
       if (!user) {
-        setSubmitMessage("Creating user account...");
+        setSubmitMessage("Creating user profile...");
         
-        // Create new user with all fields
         const userData = {
           telegram_id: telegramId,
           telegram_username: telegramData.username || formData.telegramUsername || null,
@@ -79,14 +76,6 @@ const Step3UniversityId = ({
           full_name: formData.fullName,
           photo_url: telegramData.photo_url || null,
           verification_status: 'pending',
-          university_name: formData.universityName,
-          department: formData.department,
-          student_year: formData.studentYear,
-          student_id: formData.studentId,
-          gender: formData.gender,
-          bio: '',
-          interests: [],
-          location: '',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -105,33 +94,16 @@ const Step3UniversityId = ({
         }
         user = newUser;
       } else {
-        // Update existing user with new information
-        setSubmitMessage("Updating user information...");
-        
-        const updateData = {
-          full_name: formData.fullName,
-          first_name: formData.fullName?.split(' ')[0] || user.first_name,
-          last_name: formData.fullName?.split(' ').slice(1).join(' ') || user.last_name,
-          university_name: formData.universityName,
-          department: formData.department,
-          student_year: formData.studentYear,
-          student_id: formData.studentId,
-          gender: formData.gender,
-          verification_status: 'pending',
-          updated_at: new Date().toISOString()
-        };
-
-        console.log("Updating user:", updateData);
-
+        // Update user verification status to pending
         const { error: updateError } = await supabase
           .from('users')
-          .update(updateData)
+          .update({ 
+            verification_status: 'pending',
+            updated_at: new Date().toISOString()
+          })
           .eq('id', user.id);
 
-        if (updateError) {
-          console.error("Update error:", updateError);
-          throw updateError;
-        }
+        if (updateError) throw updateError;
       }
 
       setUploadProgress(30);
@@ -166,7 +138,7 @@ const Step3UniversityId = ({
 
       console.log("Image uploaded, public URL:", publicUrl);
 
-      // 3. Create verification record with all details
+      // 3. Create verification record in student_verifications table
       setSubmitMessage("Saving verification data...");
       
       const verificationData = {
@@ -176,7 +148,6 @@ const Step3UniversityId = ({
         department: formData.department,
         student_year: formData.studentYear,
         student_id: formData.studentId,
-        gender: formData.gender,
         id_photo_url: publicUrl,
         id_photo_path: fileName,
         status: 'pending',
@@ -409,33 +380,6 @@ const Step3UniversityId = ({
             />
             {errors.studentId && (
               <p className="mt-1 text-sm text-pink-200">{errors.studentId}</p>
-            )}
-          </div>
-
-          {/* Gender Selection */}
-          <div>
-            <label className="block text-white font-medium mb-1 drop-shadow">
-              Gender <span className="text-pink-200">*</span>
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              {['male', 'female'].map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => handleChange({ target: { name: 'gender', value: option } })}
-                  className={`p-3 rounded-xl border-2 transition-all capitalize ${
-                    formData.gender === option
-                      ? 'border-pink-200 bg-pink-200/20 text-white'
-                      : 'border-white/30 bg-white/5 text-white/70 hover:border-white/50'
-                  }`}
-                  disabled={isSubmitting}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-            {errors.gender && (
-              <p className="mt-1 text-sm text-pink-200">{errors.gender}</p>
             )}
           </div>
 
