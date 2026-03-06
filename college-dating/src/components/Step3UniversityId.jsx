@@ -48,6 +48,9 @@ const Step3UniversityId = ({
       if (!formData.studentId) {
         throw new Error("Please enter your student ID");
       }
+      if (!formData.gender) {
+        throw new Error("Please select your gender in the previous step");
+      }
       if (!formData.idPhoto) {
         throw new Error("Please upload your university ID photo");
       }
@@ -64,7 +67,7 @@ const Step3UniversityId = ({
 
       if (userError) throw userError;
 
-      // If user doesn't exist, create basic user profile
+      // If user doesn't exist, create basic user profile with gender
       if (!user) {
         setSubmitMessage("Creating user profile...");
         
@@ -76,11 +79,12 @@ const Step3UniversityId = ({
           full_name: formData.fullName,
           photo_url: telegramData.photo_url || null,
           verification_status: 'pending',
+          gender: formData.gender, // CRITICAL: Save gender from Step2
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
 
-        console.log("Creating new user:", userData);
+        console.log("Creating new user with gender:", userData.gender);
 
         const { data: newUser, error: createError } = await supabase
           .from('users')
@@ -93,17 +97,28 @@ const Step3UniversityId = ({
           throw createError;
         }
         user = newUser;
+        console.log("User created with ID:", user.id, "gender:", user.gender);
       } else {
-        // Update user verification status to pending
+        // Update existing user with verification status and gender
+        setSubmitMessage("Updating user information...");
+        
+        const updateData = { 
+          verification_status: 'pending',
+          gender: formData.gender, // CRITICAL: Update gender from Step2
+          updated_at: new Date().toISOString()
+        };
+
+        console.log("Updating user with gender:", formData.gender);
+
         const { error: updateError } = await supabase
           .from('users')
-          .update({ 
-            verification_status: 'pending',
-            updated_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('id', user.id);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error("Update error:", updateError);
+          throw updateError;
+        }
       }
 
       setUploadProgress(30);
@@ -172,7 +187,8 @@ const Step3UniversityId = ({
 
       setUploadProgress(100);
 
-      console.log("Verification created:", verification);
+      console.log("Verification created successfully");
+      console.log("User gender saved:", user.gender);
 
       setSubmitStatus("success");
       setSubmitMessage("Verification submitted successfully! Your ID will be reviewed by admin.");
@@ -381,6 +397,17 @@ const Step3UniversityId = ({
             {errors.studentId && (
               <p className="mt-1 text-sm text-pink-200">{errors.studentId}</p>
             )}
+          </div>
+
+          {/* Gender Display (Read-only) */}
+          <div className="bg-white/10 rounded-lg p-4 border border-white/20">
+            <p className="text-white/70 text-sm mb-1">Your selected gender:</p>
+            <p className="text-white font-medium text-lg capitalize">
+              {formData.gender || 'Not selected in previous step'}
+            </p>
+            <p className="text-white/50 text-xs mt-2">
+              This was set in Step 2 and will be saved to your profile
+            </p>
           </div>
 
           {/* University ID Photo */}
