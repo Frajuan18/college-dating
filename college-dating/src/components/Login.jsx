@@ -32,16 +32,22 @@ const Login = () => {
           first_name: tgUser.first_name,
           last_name: tgUser.last_name,
           username: tgUser.username,
-          photo_url: tgUser.photo_url
+          photo_url: tgUser.photo_url,
+          language_code: tgUser.language_code,
+          is_premium: tgUser.is_premium
         };
         console.log('Detected Telegram user from WebApp:', telegramUserData);
+        
+        // Save to localStorage for future use
+        localStorage.setItem('telegramUser', JSON.stringify(telegramUserData));
+        localStorage.setItem('telegramId', telegramId);
       } 
       // Try to get from localStorage
       else {
         const storedTelegramUser = localStorage.getItem('telegramUser');
         if (storedTelegramUser) {
           telegramUserData = JSON.parse(storedTelegramUser);
-          telegramId = telegramUserData.id || telegramUserData.telegram_id;
+          telegramId = telegramUserData.id || localStorage.getItem('telegramId');
           console.log('Detected Telegram user from localStorage:', telegramUserData);
         }
       }
@@ -55,24 +61,10 @@ const Login = () => {
 
       setTelegramData(telegramUserData);
 
-      // First, find the user in the users table by telegram_id
+      // Find the user in the users table by telegram_id
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select(`
-          id,
-          telegram_id,
-          first_name,
-          last_name,
-          full_name,
-          photo_url,
-          university_name,
-          gender,
-          verification_status,
-          bio,
-          interests,
-          created_at,
-          updated_at
-        `)
+        .select('*')
         .eq('telegram_id', telegramId)
         .maybeSingle();
 
@@ -90,7 +82,7 @@ const Login = () => {
 
       console.log('Found user in users table:', userData);
 
-      // Now check if this user has any verification records
+      // Get the latest verification for this user from student_verifications table
       const { data: verifications, error: verifError } = await supabase
         .from('student_verifications')
         .select('*')
@@ -131,13 +123,21 @@ const Login = () => {
         first_name: user.first_name || telegramData?.first_name || '',
         last_name: user.last_name || telegramData?.last_name || '',
         full_name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-        username: telegramData?.username || user.telegram_username || '',
+        telegram_username: user.telegram_username || telegramData?.username || '',
         photo_url: user.photo_url || telegramData?.photo_url || null,
-        university_name: user.university_name || '',
+        language_code: user.language_code || telegramData?.language_code || null,
+        is_premium: user.is_premium || telegramData?.is_premium || false,
+        university_name: user.university_name || (user.latestVerification?.university_name) || '',
+        department: user.department || (user.latestVerification?.department) || '',
+        student_year: user.student_year || (user.latestVerification?.student_year) || '',
+        student_id: user.student_id || (user.latestVerification?.student_id) || '',
         gender: user.gender || '',
-        verification_status: user.verification_status || 'pending',
+        verification_status: user.verification_status || (user.latestVerification?.status) || 'pending',
         bio: user.bio || '',
-        interests: user.interests || []
+        interests: user.interests || [],
+        location: user.location || '',
+        created_at: user.created_at,
+        updated_at: user.updated_at
       };
 
       localStorage.setItem('telegramUser', JSON.stringify(userData));
@@ -147,11 +147,11 @@ const Login = () => {
       console.log('Logged in as:', userData.full_name || userData.first_name);
       
       // Redirect based on verification status
-      if (user.verification_status === 'verified') {
+      if (userData.verification_status === 'verified' || userData.verification_status === 'approved') {
         navigate('/home');
-      } else if (user.verification_status === 'pending') {
+      } else if (userData.verification_status === 'pending') {
         navigate('/verification-pending');
-      } else if (user.verification_status === 'rejected') {
+      } else if (userData.verification_status === 'rejected') {
         navigate('/verification-rejected');
       } else {
         // No verification or not verified
@@ -202,8 +202,11 @@ const Login = () => {
   const getVerificationStatusBadge = () => {
     if (!user) return null;
     
-    switch(user.verification_status) {
+    const status = user.verification_status || user.latestVerification?.status;
+    
+    switch(status) {
       case 'verified':
+      case 'approved':
         return (
           <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-300 text-xs sm:text-sm rounded-full mb-4">
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -257,7 +260,7 @@ const Login = () => {
         <div className="relative z-10 flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-white border-t-transparent mx-auto mb-4"></div>
-            <p className="text-white text-lg">Detecting your account...</p>
+            <p className="text-white text-lg">Detecting your Telegram account...</p>
           </div>
         </div>
       </div>
@@ -341,11 +344,11 @@ const Login = () => {
                 )}
 
                 {/* Telegram Username */}
-                {telegramData?.username && (
+                {user.telegram_username || telegramData?.username ? (
                   <p className="text-white/50 text-xs sm:text-sm mb-3">
-                    @{telegramData.username}
+                    @{user.telegram_username || telegramData?.username}
                   </p>
-                )}
+                ) : null}
 
                 {/* Verification Status Badge */}
                 {getVerificationStatusBadge()}
@@ -375,7 +378,7 @@ const Login = () => {
               </div>
             </div>
           ) : (
-            /* No Account Found - Show Telegram Login Option */
+            /* No Account Found - Show Option to Register */
             <div className="bg-white/10 backdrop-blur-sm border-2 border-white/30 rounded-xl sm:rounded-2xl p-8 sm:p-10 text-center">
               <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/20 mx-auto mb-4 sm:mb-6 flex items-center justify-center">
                 <svg className="w-10 h-10 sm:w-12 sm:h-12 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -383,7 +386,7 @@ const Login = () => {
                 </svg>
               </div>
               
-              <h2 className="text-white text-xl sm:text-2xl font-bold mb-2">No Account Found</h2>
+              <h2 className="text-white text-xl sm:text-2xl font-bold mb-2">Welcome to MatchMaker!</h2>
               <p className="text-white/70 text-sm sm:text-base mb-6 sm:mb-8">
                 We couldn't find an account linked to your Telegram. Create one to start connecting with verified students.
               </p>
