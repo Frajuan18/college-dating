@@ -8,7 +8,8 @@ import {
   HiOutlineXCircle,
   HiOutlineHome,
   HiOutlineRefresh,
-  HiOutlineUser 
+  HiOutlineUser,
+  HiOutlineLogin 
 } from 'react-icons/hi';
 
 const CoverPage = () => {
@@ -59,7 +60,7 @@ const CoverPage = () => {
           const currentStatus = verifications[0].status;
           setStatus(currentStatus);
           
-          // ✅ AUTO-REDIRECT IF VERIFIED
+          // AUTO-REDIRECT IF VERIFIED
           if (currentStatus === 'approved') {
             navigate('/home');
             return;
@@ -85,6 +86,7 @@ const CoverPage = () => {
     localStorage.removeItem('formData');
     navigate('/register');
   };
+  const handleLogin = () => navigate('/login');
 
   // Show nothing while checking (prevents flash)
   if (checking) return null;
@@ -100,26 +102,41 @@ const CoverPage = () => {
           <div className="absolute inset-0 bg-black/20" />
         </div>
 
-        <nav className="relative z-10 flex justify-between items-center px-6 py-6">
-          <div className="text-white text-2xl font-bold">
+        <nav className="relative z-10 flex justify-between items-center px-4 sm:px-6 py-4 sm:py-6">
+          <div className="text-white text-xl sm:text-2xl font-bold">
             MATCH<span className="text-pink-200">MAKER</span>
           </div>
+          <button
+            onClick={handleLogin}
+            className="flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-full hover:bg-white/20 transition border border-white/30"
+          >
+            <HiOutlineLogin className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-sm sm:text-base">Login</span>
+          </button>
         </nav>
 
-        <main className="relative z-10 flex flex-col items-center justify-center px-6 py-16">
+        <main className="relative z-10 flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16">
           <div className="max-w-3xl text-center">
-            <h1 className="text-white text-5xl md:text-7xl font-bold mb-6">
+            <h1 className="text-white text-4xl sm:text-5xl md:text-7xl font-bold mb-4 sm:mb-6">
               Find your <span className="text-pink-200">Perfect match</span>
             </h1>
-            <p className="text-white/90 text-lg md:text-xl mb-10">
+            <p className="text-white/90 text-base sm:text-lg md:text-xl mb-6 sm:mb-10">
               Join thousands finding meaningful connections every day.
             </p>
-            <button 
-              onClick={handleGetStarted}
-              className="bg-white text-rose-600 font-bold px-8 py-4 rounded-full shadow-xl hover:scale-105 transition"
-            >
-              Get Started
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+              <button 
+                onClick={handleGetStarted}
+                className="bg-white text-rose-600 font-bold px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl hover:scale-105 transition text-sm sm:text-base"
+              >
+                Get Started
+              </button>
+              <button 
+                onClick={handleLogin}
+                className="bg-transparent border-2 border-white/30 text-white font-bold px-6 sm:px-8 py-3 sm:py-4 rounded-full hover:bg-white/10 transition text-sm sm:text-base"
+              >
+                Already have an account?
+              </button>
+            </div>
           </div>
         </main>
       </div>
@@ -137,27 +154,36 @@ const CoverPage = () => {
           <div className="absolute inset-0 bg-black/20" />
         </div>
 
-        <nav className="relative z-10 flex justify-between items-center px-6 py-6">
-          <div className="text-white text-2xl font-bold">
+        <nav className="relative z-10 flex justify-between items-center px-4 sm:px-6 py-4 sm:py-6">
+          <div className="text-white text-xl sm:text-2xl font-bold">
             MATCH<span className="text-pink-200">MAKER</span>
           </div>
-          <div className="text-white/80 bg-white/10 px-4 py-2 rounded-full">
-            <HiOutlineUser className="w-5 h-5 inline mr-2" />
-            {userName}
+          <div className="flex items-center gap-3">
+            <div className="text-white/80 bg-white/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-sm sm:text-base">
+              <HiOutlineUser className="w-4 h-4 sm:w-5 sm:h-5 inline mr-1 sm:mr-2" />
+              {userName}
+            </div>
+            <button
+              onClick={handleLogin}
+              className="flex items-center gap-1 sm:gap-2 bg-white/10 backdrop-blur-sm text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full hover:bg-white/20 transition border border-white/30"
+            >
+              <HiOutlineLogin className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="text-xs sm:text-sm">Switch</span>
+            </button>
           </div>
         </nav>
 
-        <main className="relative z-10 flex flex-col items-center justify-center px-6 py-16">
+        <main className="relative z-10 flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16">
           <div className="max-w-3xl text-center">
-            <h1 className="text-white text-5xl md:text-7xl font-bold mb-6">
+            <h1 className="text-white text-3xl sm:text-5xl md:text-7xl font-bold mb-4 sm:mb-6">
               Welcome, {userName}!
             </h1>
-            <p className="text-white/90 text-lg md:text-xl mb-10">
+            <p className="text-white/90 text-base sm:text-lg md:text-xl mb-6 sm:mb-10">
               Complete your verification to start matching.
             </p>
             <button 
               onClick={handleGetStarted}
-              className="bg-white text-rose-600 font-bold px-8 py-4 rounded-full shadow-xl hover:scale-105 transition"
+              className="bg-white text-rose-600 font-bold px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl hover:scale-105 transition text-sm sm:text-base"
             >
               Complete Verification
             </button>
@@ -178,25 +204,34 @@ const CoverPage = () => {
           <div className="absolute inset-0 bg-black/20" />
         </div>
 
-        <nav className="relative z-10 flex justify-between items-center px-6 py-6">
-          <div className="text-white text-2xl font-bold">
+        <nav className="relative z-10 flex justify-between items-center px-4 sm:px-6 py-4 sm:py-6">
+          <div className="text-white text-xl sm:text-2xl font-bold">
             MATCH<span className="text-pink-200">MAKER</span>
           </div>
-          <div className="text-white/80 bg-white/10 px-4 py-2 rounded-full">
-            <HiOutlineUser className="w-5 h-5 inline mr-2" />
-            {userName}
+          <div className="flex items-center gap-3">
+            <div className="text-white/80 bg-white/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-sm sm:text-base">
+              <HiOutlineUser className="w-4 h-4 sm:w-5 sm:h-5 inline mr-1 sm:mr-2" />
+              {userName}
+            </div>
+            <button
+              onClick={handleLogin}
+              className="flex items-center gap-1 sm:gap-2 bg-white/10 backdrop-blur-sm text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full hover:bg-white/20 transition border border-white/30"
+            >
+              <HiOutlineLogin className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="text-xs sm:text-sm">Switch</span>
+            </button>
           </div>
         </nav>
 
-        <main className="relative z-10 flex flex-col items-center justify-center px-6 py-16">
-          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 max-w-md border border-yellow-400/30">
-            <div className="flex justify-center mb-4">
-              <div className="bg-yellow-400/20 p-4 rounded-full">
-                <HiOutlineClock className="w-12 h-12 text-yellow-400" />
+        <main className="relative z-10 flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16">
+          <div className="bg-white/10 backdrop-blur-md rounded-xl sm:rounded-2xl p-6 sm:p-8 max-w-md border border-yellow-400/30">
+            <div className="flex justify-center mb-3 sm:mb-4">
+              <div className="bg-yellow-400/20 p-3 sm:p-4 rounded-full">
+                <HiOutlineClock className="w-8 h-8 sm:w-12 sm:h-12 text-yellow-400" />
               </div>
             </div>
-            <h3 className="text-white text-2xl font-bold mb-3 text-center">Verification Pending</h3>
-            <p className="text-white/80 text-center">
+            <h3 className="text-white text-xl sm:text-2xl font-bold mb-2 sm:mb-3 text-center">Verification Pending</h3>
+            <p className="text-white/80 text-sm sm:text-base text-center">
               Your student ID is being reviewed. This usually takes 24-48 hours.
             </p>
           </div>
@@ -216,32 +251,41 @@ const CoverPage = () => {
           <div className="absolute inset-0 bg-black/20" />
         </div>
 
-        <nav className="relative z-10 flex justify-between items-center px-6 py-6">
-          <div className="text-white text-2xl font-bold">
+        <nav className="relative z-10 flex justify-between items-center px-4 sm:px-6 py-4 sm:py-6">
+          <div className="text-white text-xl sm:text-2xl font-bold">
             MATCH<span className="text-pink-200">MAKER</span>
           </div>
-          <div className="text-white/80 bg-white/10 px-4 py-2 rounded-full">
-            <HiOutlineUser className="w-5 h-5 inline mr-2" />
-            {userName}
+          <div className="flex items-center gap-3">
+            <div className="text-white/80 bg-white/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-sm sm:text-base">
+              <HiOutlineUser className="w-4 h-4 sm:w-5 sm:h-5 inline mr-1 sm:mr-2" />
+              {userName}
+            </div>
+            <button
+              onClick={handleLogin}
+              className="flex items-center gap-1 sm:gap-2 bg-white/10 backdrop-blur-sm text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full hover:bg-white/20 transition border border-white/30"
+            >
+              <HiOutlineLogin className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="text-xs sm:text-sm">Switch</span>
+            </button>
           </div>
         </nav>
 
-        <main className="relative z-10 flex flex-col items-center justify-center px-6 py-16">
-          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 max-w-md border border-red-400/30">
-            <div className="flex justify-center mb-4">
-              <div className="bg-red-400/20 p-4 rounded-full">
-                <HiOutlineXCircle className="w-12 h-12 text-red-400" />
+        <main className="relative z-10 flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-16">
+          <div className="bg-white/10 backdrop-blur-md rounded-xl sm:rounded-2xl p-6 sm:p-8 max-w-md border border-red-400/30">
+            <div className="flex justify-center mb-3 sm:mb-4">
+              <div className="bg-red-400/20 p-3 sm:p-4 rounded-full">
+                <HiOutlineXCircle className="w-8 h-8 sm:w-12 sm:h-12 text-red-400" />
               </div>
             </div>
-            <h3 className="text-white text-2xl font-bold mb-3 text-center">Verification Rejected</h3>
-            <p className="text-white/80 text-center mb-6">
+            <h3 className="text-white text-xl sm:text-2xl font-bold mb-2 sm:mb-3 text-center">Verification Rejected</h3>
+            <p className="text-white/80 text-sm sm:text-base text-center mb-4 sm:mb-6">
               Your verification was not approved. Please try again with a clearer photo.
             </p>
             <button 
               onClick={handleTryAgain}
-              className="bg-red-500 text-white font-bold px-8 py-3 rounded-full hover:bg-red-600 transition w-full flex items-center justify-center gap-2"
+              className="bg-red-500 text-white font-bold px-6 sm:px-8 py-2.5 sm:py-3 rounded-full hover:bg-red-600 transition w-full flex items-center justify-center gap-2 text-sm sm:text-base"
             >
-              <HiOutlineRefresh className="w-5 h-5" />
+              <HiOutlineRefresh className="w-4 h-4 sm:w-5 sm:h-5" />
               Try Again
             </button>
           </div>
