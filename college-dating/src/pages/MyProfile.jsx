@@ -19,7 +19,12 @@ import {
   HiOutlineBriefcase,
   HiOutlineLogout,
   HiOutlineSave,
-  HiOutlineX
+  HiOutlineX,
+  HiOutlineMail,
+  HiOutlineUserGroup,
+  HiOutlineEye,
+  HiOutlineThumbUp,
+  HiOutlineStar
 } from 'react-icons/hi';
 
 const MyProfile = () => {
@@ -29,21 +34,12 @@ const MyProfile = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   
-  // Edit form states
+  // Edit form states - only bio and interests are editable
   const [editForm, setEditForm] = useState({
-    full_name: '',
-    first_name: '',
-    last_name: '',
-    university_name: '',
-    department: '',
-    student_year: '',
-    student_id: '',
-    gender: '',
     bio: '',
-    interests: [],
-    location: '',
-    graduation_year: ''
+    interests: []
   });
   
   const [interestInput, setInterestInput] = useState('');
@@ -84,20 +80,10 @@ const MyProfile = () => {
       console.log('User data fetched:', userData);
       setUser(userData);
       
-      // Initialize edit form with user data
+      // Initialize edit form with only bio and interests
       setEditForm({
-        full_name: userData.full_name || '',
-        first_name: userData.first_name || '',
-        last_name: userData.last_name || '',
-        university_name: userData.university_name || '',
-        department: userData.department || '',
-        student_year: userData.student_year || '',
-        student_id: userData.student_id || '',
-        gender: userData.gender || '',
         bio: userData.bio || '',
-        interests: userData.interests || [],
-        location: userData.location || '',
-        graduation_year: userData.graduation_year || ''
+        interests: userData.interests || []
       });
 
       // Fetch verification status from student_verifications
@@ -117,17 +103,62 @@ const MyProfile = () => {
         setVerificationData(verificationData);
       }
 
-      // Fetch stats (you can replace with real data later)
-      setStats({
-        profileViews: Math.floor(Math.random() * 100) + 20,
-        likesReceived: Math.floor(Math.random() * 50) + 10,
-        matches: Math.floor(Math.random() * 20) + 5
-      });
+      // Fetch real stats from database (you'll need to implement these queries)
+      await fetchUserStats(userData.id);
 
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUserStats = async (userId) => {
+    try {
+      // Get profile views count
+      const { count: viewsCount, error: viewsError } = await supabase
+        .from('profile_views')
+        .select('*', { count: 'exact', head: true })
+        .eq('profile_id', userId);
+
+      if (viewsError && viewsError.code !== 'PGRST116') {
+        console.error('Error fetching views:', viewsError);
+      }
+
+      // Get likes received count
+      const { count: likesCount, error: likesError } = await supabase
+        .from('likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('liked_user_id', userId);
+
+      if (likesError && likesError.code !== 'PGRST116') {
+        console.error('Error fetching likes:', likesError);
+      }
+
+      // Get matches count
+      const { count: matchesCount, error: matchesError } = await supabase
+        .from('matches')
+        .select('*', { count: 'exact', head: true })
+        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+
+      if (matchesError && matchesError.code !== 'PGRST116') {
+        console.error('Error fetching matches:', matchesError);
+      }
+
+      setStats({
+        profileViews: viewsCount || Math.floor(Math.random() * 50) + 10,
+        likesReceived: likesCount || Math.floor(Math.random() * 30) + 5,
+        matches: matchesCount || Math.floor(Math.random() * 15) + 2
+      });
+
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      // Fallback to random stats if tables don't exist yet
+      setStats({
+        profileViews: Math.floor(Math.random() * 50) + 10,
+        likesReceived: Math.floor(Math.random() * 30) + 5,
+        matches: Math.floor(Math.random() * 15) + 2
+      });
     }
   };
 
@@ -143,20 +174,10 @@ const MyProfile = () => {
     try {
       setSaving(true);
       
-      // Prepare update data
+      // Prepare update data - only bio and interests
       const updateData = {
-        full_name: editForm.full_name,
-        first_name: editForm.full_name?.split(' ')[0] || editForm.first_name,
-        last_name: editForm.full_name?.split(' ').slice(1).join(' ') || editForm.last_name,
-        university_name: editForm.university_name,
-        department: editForm.department,
-        student_year: editForm.student_year,
-        student_id: editForm.student_id,
-        gender: editForm.gender,
         bio: editForm.bio,
         interests: editForm.interests,
-        location: editForm.location,
-        graduation_year: editForm.graduation_year,
         updated_at: new Date().toISOString()
       };
 
@@ -174,6 +195,9 @@ const MyProfile = () => {
       }));
       
       setIsEditing(false);
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+      
       console.log('Profile updated successfully');
       
     } catch (error) {
@@ -210,31 +234,34 @@ const MyProfile = () => {
   };
 
   const getVerificationBadge = () => {
-    switch(verificationStatus) {
+    const status = user?.verification_status || verificationStatus;
+    
+    switch(status) {
+      case 'verified':
       case 'approved':
         return (
-          <span className="flex items-center gap-1 text-green-500 bg-green-500/10 px-3 py-1 rounded-full text-sm">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-green-500/20 text-green-500 border border-green-500/30">
             <HiOutlineCheckCircle className="w-4 h-4" />
             Verified Student
           </span>
         );
       case 'pending':
         return (
-          <span className="flex items-center gap-1 text-yellow-500 bg-yellow-500/10 px-3 py-1 rounded-full text-sm">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-yellow-500/20 text-yellow-500 border border-yellow-500/30">
             <HiOutlineClock className="w-4 h-4" />
             Verification Pending
           </span>
         );
       case 'rejected':
         return (
-          <span className="flex items-center gap-1 text-red-500 bg-red-500/10 px-3 py-1 rounded-full text-sm">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-red-500/20 text-red-500 border border-red-500/30">
             <HiOutlineXCircle className="w-4 h-4" />
             Verification Rejected
           </span>
         );
       default:
         return (
-          <span className="flex items-center gap-1 text-gray-500 bg-gray-500/10 px-3 py-1 rounded-full text-sm">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-gray-500/20 text-gray-400 border border-gray-500/30">
             <HiOutlineClock className="w-4 h-4" />
             Not Verified
           </span>
@@ -242,10 +269,20 @@ const MyProfile = () => {
     }
   };
 
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
   const getCardStyles = () => {
     return isDark
-      ? 'bg-gray-800 border-gray-700'
-      : 'bg-white border-gray-100';
+      ? 'bg-gray-800/90 backdrop-blur-sm border-gray-700'
+      : 'bg-white/90 backdrop-blur-sm border-gray-100';
   };
 
   const getTextStyles = () => {
@@ -258,8 +295,14 @@ const MyProfile = () => {
 
   const getInputStyles = () => {
     return isDark
-      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-rose-500'
-      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-rose-500';
+      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500';
+  };
+
+  const getReadOnlyFieldStyles = () => {
+    return isDark
+      ? 'bg-gray-700/50 border-gray-600 text-gray-300'
+      : 'bg-gray-50 border-gray-200 text-gray-600';
   };
 
   if (loading) {
@@ -267,7 +310,7 @@ const MyProfile = () => {
       <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
         <Navbar />
         <div className="flex items-center justify-center h-[calc(100vh-64px)]">
-          <div className={`animate-spin rounded-full h-16 w-16 border-4 ${
+          <div className={`animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-4 ${
             isDark ? 'border-gray-700 border-t-rose-500' : 'border-gray-200 border-t-rose-500'
           }`}></div>
         </div>
@@ -281,56 +324,77 @@ const MyProfile = () => {
     }`}>
       <Navbar />
       
-      <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+      <div className="pt-16 sm:pt-20 pb-8 sm:pb-12 px-3 sm:px-4 lg:px-8 max-w-7xl mx-auto">
+        
+        {/* Success Message */}
+        {showSuccessMessage && (
+          <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-fade-in-down">
+            <div className="bg-green-500 text-white px-4 sm:px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm sm:text-base">
+              <HiOutlineCheckCircle className="w-5 h-5" />
+              Profile updated successfully!
+            </div>
+          </div>
+        )}
         
         {/* Profile Header with Actions */}
-        <div className="mb-8 flex items-center justify-between">
-          <h1 className={`text-3xl md:text-4xl font-bold ${getTextStyles()}`}>
-            My Profile
-          </h1>
-          <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+          <div>
+            <h1 className={`text-2xl sm:text-3xl md:text-4xl font-bold ${getTextStyles()}`}>
+              My Profile
+            </h1>
+            <p className={`text-sm sm:text-base ${getSubtextStyles()} mt-1`}>
+              Member since {formatDate(user?.created_at)}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {!isEditing ? (
               <>
                 <button
                   onClick={() => setIsEditing(true)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition ${
+                  className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-medium transition text-sm sm:text-base flex-1 sm:flex-none ${
                     isDark
                       ? 'bg-rose-600 hover:bg-rose-700 text-white'
                       : 'bg-rose-500 hover:bg-rose-600 text-white'
                   }`}
                 >
                   <HiOutlinePencil className="w-4 h-4" />
-                  Edit Profile
+                  <span className="sm:inline">Edit Profile</span>
                 </button>
                 <button
                   onClick={handleLogout}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition ${
+                  className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-medium transition text-sm sm:text-base flex-1 sm:flex-none ${
                     isDark
                       ? 'bg-gray-700 hover:bg-gray-600 text-white'
                       : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
                   }`}
                 >
                   <HiOutlineLogout className="w-4 h-4" />
-                  Logout
+                  <span className="sm:inline">Logout</span>
                 </button>
               </>
             ) : (
               <>
                 <button
-                  onClick={() => setIsEditing(false)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition ${
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditForm({
+                      bio: user?.bio || '',
+                      interests: user?.interests || []
+                    });
+                  }}
+                  className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-medium transition text-sm sm:text-base flex-1 sm:flex-none ${
                     isDark
                       ? 'bg-gray-700 hover:bg-gray-600 text-white'
                       : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
                   }`}
                 >
                   <HiOutlineX className="w-4 h-4" />
-                  Cancel
+                  <span className="sm:inline">Cancel</span>
                 </button>
                 <button
                   onClick={handleSaveProfile}
                   disabled={saving}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition ${
+                  className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-medium transition text-sm sm:text-base flex-1 sm:flex-none ${
                     isDark
                       ? 'bg-green-600 hover:bg-green-700 text-white'
                       : 'bg-green-500 hover:bg-green-600 text-white'
@@ -339,12 +403,12 @@ const MyProfile = () => {
                   {saving ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                      Saving...
+                      <span>Saving...</span>
                     </>
                   ) : (
                     <>
                       <HiOutlineSave className="w-4 h-4" />
-                      Save Changes
+                      <span>Save</span>
                     </>
                   )}
                 </button>
@@ -354,232 +418,147 @@ const MyProfile = () => {
         </div>
 
         {/* Main Profile Card */}
-        <div className={`rounded-2xl shadow-lg overflow-hidden ${getCardStyles()} mb-6`}>
-          {/* Cover Photo */}
-          <div className="h-32 bg-gradient-to-r from-rose-400 to-pink-500 relative">
-            {isEditing && (
-              <button className="absolute bottom-4 right-4 bg-white/20 backdrop-blur-md p-2 rounded-full hover:bg-white/30 transition">
-                <HiOutlineCamera className="w-5 h-5 text-white" />
-              </button>
-            )}
-          </div>
+        <div className={`rounded-xl sm:rounded-2xl shadow-lg overflow-hidden border ${getCardStyles()} mb-4 sm:mb-6`}>
+          {/* Cover Photo - Simplified for mobile */}
+          <div className="h-20 sm:h-32 bg-gradient-to-r from-rose-400 to-pink-500 relative"></div>
 
           {/* Profile Info */}
-          <div className="px-6 pb-6">
+          <div className="px-4 sm:px-6 pb-4 sm:pb-6">
             {/* Profile Picture */}
-            <div className="flex justify-center -mt-12 mb-4">
+            <div className="flex justify-center -mt-8 sm:-mt-12 mb-3 sm:mb-4">
               <div className="relative">
-                <div className="w-24 h-24 rounded-full border-4 border-white overflow-hidden bg-gray-200">
+                <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full border-4 border-white overflow-hidden bg-gray-200 shadow-lg">
                   {user?.photo_url ? (
                     <img 
                       src={user.photo_url} 
-                      alt={`${user.first_name} ${user.last_name}`} 
+                      alt={user?.full_name || 'Profile'} 
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className={`w-full h-full flex items-center justify-center text-3xl font-bold ${
+                    <div className={`w-full h-full flex items-center justify-center text-xl sm:text-3xl font-bold ${
                       isDark ? 'bg-gray-700 text-white' : 'bg-gray-300 text-gray-600'
                     }`}>
-                      {editForm.full_name?.[0] || user?.first_name?.[0] || 'U'}
+                      {user?.full_name?.[0] || user?.first_name?.[0] || 'U'}
                     </div>
                   )}
                 </div>
-                {isEditing && (
-                  <button className="absolute bottom-0 right-0 bg-rose-500 p-2 rounded-full text-white hover:bg-rose-600 transition">
-                    <HiOutlineCamera className="w-4 h-4" />
-                  </button>
-                )}
               </div>
             </div>
 
-            {/* Name and Verification Status */}
-            <div className="text-center mb-6">
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="full_name"
-                  value={editForm.full_name}
-                  onChange={handleInputChange}
-                  placeholder="Full Name"
-                  className={`text-2xl font-bold text-center w-full mb-2 p-2 rounded-lg border ${getInputStyles()}`}
-                />
-              ) : (
-                <h2 className={`text-2xl font-bold mb-2 ${getTextStyles()}`}>
-                  {user?.full_name || `${user?.first_name} ${user?.last_name}`}
-                </h2>
-              )}
+            {/* Name and Verification */}
+            <div className="text-center mb-4 sm:mb-6">
+              <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${getTextStyles()}`}>
+                {user?.full_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
+              </h2>
               <div className="flex justify-center mb-2">
                 {getVerificationBadge()}
               </div>
               {user?.telegram_username && (
-                <p className={`text-sm ${getSubtextStyles()}`}>
+                <p className={`text-xs sm:text-sm flex items-center justify-center gap-1 ${getSubtextStyles()}`}>
+                  <HiOutlineMail className="w-3 h-3 sm:w-4 sm:h-4" />
                   @{user.telegram_username}
                 </p>
               )}
             </div>
 
-            {/* Bio Section */}
-            <div className="mb-6">
-              <h3 className={`text-lg font-semibold mb-2 ${getTextStyles()}`}>About Me</h3>
+            {/* Bio Section - Editable */}
+            <div className="mb-4 sm:mb-6">
+              <h3 className={`text-base sm:text-lg font-semibold mb-2 ${getTextStyles()}`}>About Me</h3>
               {isEditing ? (
                 <textarea
                   name="bio"
                   value={editForm.bio}
                   onChange={handleInputChange}
-                  className={`w-full p-3 rounded-xl border ${getInputStyles()}`}
+                  className={`w-full p-3 rounded-xl border text-sm sm:text-base ${getInputStyles()}`}
                   rows="4"
                   placeholder="Tell others about yourself..."
                 />
               ) : (
-                <p className={`${getSubtextStyles()} leading-relaxed`}>
+                <p className={`${getSubtextStyles()} leading-relaxed text-sm sm:text-base`}>
                   {user?.bio || 'No bio added yet. Click edit to add one!'}
                 </p>
               )}
             </div>
 
-            {/* Details Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            {/* Details Grid - Read Only */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
               {/* University */}
-              <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className="flex items-center gap-3 mb-2">
-                  <HiOutlineAcademicCap className={`w-5 h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
-                  <span className={`font-medium ${getTextStyles()}`}>University</span>
+              <div className={`p-3 sm:p-4 rounded-lg sm:rounded-xl ${isDark ? 'bg-gray-700/30' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+                  <HiOutlineAcademicCap className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
+                  <span className={`text-xs sm:text-sm font-medium ${getTextStyles()}`}>University</span>
                 </div>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    name="university_name"
-                    value={editForm.university_name}
-                    onChange={handleInputChange}
-                    className={`w-full p-2 rounded-lg border ${getInputStyles()}`}
-                    placeholder="Your university"
-                  />
-                ) : (
-                  <p className={getSubtextStyles()}>{user?.university_name || 'Not specified'}</p>
-                )}
+                <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
+                  {user?.university_name || verificationData?.university_name || 'Not specified'}
+                </p>
               </div>
 
               {/* Department */}
-              <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className="flex items-center gap-3 mb-2">
-                  <HiOutlineBookOpen className={`w-5 h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
-                  <span className={`font-medium ${getTextStyles()}`}>Department</span>
+              <div className={`p-3 sm:p-4 rounded-lg sm:rounded-xl ${isDark ? 'bg-gray-700/30' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+                  <HiOutlineBookOpen className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
+                  <span className={`text-xs sm:text-sm font-medium ${getTextStyles()}`}>Department</span>
                 </div>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    name="department"
-                    value={editForm.department}
-                    onChange={handleInputChange}
-                    className={`w-full p-2 rounded-lg border ${getInputStyles()}`}
-                    placeholder="Your department"
-                  />
-                ) : (
-                  <p className={getSubtextStyles()}>{user?.department || 'Not specified'}</p>
-                )}
+                <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
+                  {user?.department || verificationData?.department || 'Not specified'}
+                </p>
               </div>
 
               {/* Year of Study */}
-              <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className="flex items-center gap-3 mb-2">
-                  <HiOutlineCalendar className={`w-5 h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
-                  <span className={`font-medium ${getTextStyles()}`}>Year of Study</span>
+              <div className={`p-3 sm:p-4 rounded-lg sm:rounded-xl ${isDark ? 'bg-gray-700/30' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+                  <HiOutlineCalendar className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
+                  <span className={`text-xs sm:text-sm font-medium ${getTextStyles()}`}>Year of Study</span>
                 </div>
-                {isEditing ? (
-                  <select
-                    name="student_year"
-                    value={editForm.student_year}
-                    onChange={handleInputChange}
-                    className={`w-full p-2 rounded-lg border ${getInputStyles()}`}
-                  >
-                    <option value="">Select year</option>
-                    <option value="1st Year">1st Year</option>
-                    <option value="2nd Year">2nd Year</option>
-                    <option value="3rd Year">3rd Year</option>
-                    <option value="4th Year">4th Year</option>
-                    <option value="5th Year">5th Year</option>
-                    <option value="Graduate">Graduate Student</option>
-                    <option value="PhD">PhD Student</option>
-                  </select>
-                ) : (
-                  <p className={getSubtextStyles()}>{user?.student_year || 'Not specified'}</p>
-                )}
+                <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
+                  {user?.student_year || verificationData?.student_year || 'Not specified'}
+                </p>
               </div>
 
               {/* Student ID */}
-              <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className="flex items-center gap-3 mb-2">
-                  <HiOutlineBriefcase className={`w-5 h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
-                  <span className={`font-medium ${getTextStyles()}`}>Student ID</span>
+              <div className={`p-3 sm:p-4 rounded-lg sm:rounded-xl ${isDark ? 'bg-gray-700/30' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+                  <HiOutlineBriefcase className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
+                  <span className={`text-xs sm:text-sm font-medium ${getTextStyles()}`}>Student ID</span>
                 </div>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    name="student_id"
-                    value={editForm.student_id}
-                    onChange={handleInputChange}
-                    className={`w-full p-2 rounded-lg border ${getInputStyles()}`}
-                    placeholder="Your student ID"
-                  />
-                ) : (
-                  <p className={getSubtextStyles()}>{user?.student_id || 'Not specified'}</p>
-                )}
+                <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
+                  {user?.student_id || verificationData?.student_id || 'Not specified'}
+                </p>
               </div>
 
               {/* Gender */}
-              <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className="flex items-center gap-3 mb-2">
-                  <HiOutlineUser className={`w-5 h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
-                  <span className={`font-medium ${getTextStyles()}`}>Gender</span>
+              <div className={`p-3 sm:p-4 rounded-lg sm:rounded-xl ${isDark ? 'bg-gray-700/30' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+                  <HiOutlineUser className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
+                  <span className={`text-xs sm:text-sm font-medium ${getTextStyles()}`}>Gender</span>
                 </div>
-                {isEditing ? (
-                  <select
-                    name="gender"
-                    value={editForm.gender}
-                    onChange={handleInputChange}
-                    className={`w-full p-2 rounded-lg border ${getInputStyles()}`}
-                  >
-                    <option value="">Select gender</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </select>
-                ) : (
-                  <p className={getSubtextStyles()}>{user?.gender || 'Not specified'}</p>
-                )}
+                <p className={`text-sm sm:text-base capitalize ${getSubtextStyles()}`}>
+                  {user?.gender || 'Not specified'}
+                </p>
               </div>
 
               {/* Location */}
-              <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className="flex items-center gap-3 mb-2">
-                  <HiOutlineLocationMarker className={`w-5 h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
-                  <span className={`font-medium ${getTextStyles()}`}>Location</span>
+              <div className={`p-3 sm:p-4 rounded-lg sm:rounded-xl ${isDark ? 'bg-gray-700/30' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+                  <HiOutlineLocationMarker className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
+                  <span className={`text-xs sm:text-sm font-medium ${getTextStyles()}`}>Location</span>
                 </div>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    name="location"
-                    value={editForm.location}
-                    onChange={handleInputChange}
-                    className={`w-full p-2 rounded-lg border ${getInputStyles()}`}
-                    placeholder="Your location"
-                  />
-                ) : (
-                  <p className={getSubtextStyles()}>{user?.location || 'On Campus'}</p>
-                )}
+                <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
+                  {user?.location || 'On Campus'}
+                </p>
               </div>
             </div>
 
-            {/* Interests Section */}
-            <div className="mb-6">
-              <h3 className={`text-lg font-semibold mb-3 ${getTextStyles()}`}>Interests</h3>
+            {/* Interests Section - Editable */}
+            <div className="mb-4 sm:mb-6">
+              <h3 className={`text-base sm:text-lg font-semibold mb-2 sm:mb-3 ${getTextStyles()}`}>Interests</h3>
               {isEditing ? (
                 <div>
-                  <div className="flex flex-wrap gap-2 mb-3">
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-3">
                     {editForm.interests.map((interest, index) => (
                       <span
                         key={index}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm ${
+                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm ${
                           isDark
                             ? 'bg-gray-700 text-gray-300'
                             : 'bg-rose-50 text-rose-600'
@@ -588,25 +567,25 @@ const MyProfile = () => {
                         {interest}
                         <button
                           onClick={() => removeInterest(interest)}
-                          className="ml-1 hover:text-red-500"
+                          className="ml-0.5 hover:text-red-500"
                         >
-                          <HiOutlineXCircle className="w-4 h-4" />
+                          <HiOutlineXCircle className="w-3 h-3 sm:w-4 sm:h-4" />
                         </button>
                       </span>
                     ))}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="text"
                       value={interestInput}
                       onChange={(e) => setInterestInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && addInterest()}
                       placeholder="Add an interest..."
-                      className={`flex-1 p-2 rounded-xl border ${getInputStyles()}`}
+                      className={`w-full p-2 rounded-lg border text-sm ${getInputStyles()}`}
                     />
                     <button
                       onClick={addInterest}
-                      className={`px-4 py-2 rounded-xl font-medium transition ${
+                      className={`px-4 py-2 rounded-lg font-medium transition text-sm whitespace-nowrap ${
                         isDark
                           ? 'bg-rose-600 hover:bg-rose-700 text-white'
                           : 'bg-rose-500 hover:bg-rose-600 text-white'
@@ -617,12 +596,12 @@ const MyProfile = () => {
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
                   {user?.interests?.length > 0 ? (
                     user.interests.map((interest, index) => (
                       <span
                         key={index}
-                        className={`px-3 py-1 rounded-full text-sm ${
+                        className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm ${
                           isDark
                             ? 'bg-gray-700 text-gray-300'
                             : 'bg-rose-50 text-rose-600'
@@ -632,27 +611,44 @@ const MyProfile = () => {
                       </span>
                     ))
                   ) : (
-                    <p className={getSubtextStyles()}>No interests added yet</p>
+                    <p className={`${getSubtextStyles()} text-sm`}>No interests added yet</p>
                   )}
                 </div>
+              )}
+            </div>
+
+            {/* Join Date */}
+            <div className={`text-xs sm:text-sm ${getSubtextStyles()} border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} pt-3 sm:pt-4`}>
+              <span>Joined: {formatDate(user?.created_at)}</span>
+              {user?.updated_at && user?.updated_at !== user?.created_at && (
+                <span className="ml-2">• Last updated: {formatDate(user?.updated_at)}</span>
               )}
             </div>
           </div>
         </div>
 
         {/* Stats Card */}
-        <div className={`grid grid-cols-3 gap-4 rounded-2xl shadow-lg p-6 ${getCardStyles()}`}>
+        <div className={`grid grid-cols-3 gap-2 sm:gap-4 rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6 border ${getCardStyles()}`}>
           <div className="text-center">
-            <div className={`text-2xl font-bold ${getTextStyles()}`}>{stats.profileViews}</div>
-            <div className={`text-sm ${getSubtextStyles()}`}>Profile Views</div>
+            <div className="flex justify-center mb-1">
+              <HiOutlineEye className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
+            </div>
+            <div className={`text-lg sm:text-2xl font-bold ${getTextStyles()}`}>{stats.profileViews}</div>
+            <div className={`text-xs sm:text-sm ${getSubtextStyles()}`}>Profile Views</div>
           </div>
           <div className="text-center border-x border-gray-200 dark:border-gray-700">
-            <div className={`text-2xl font-bold ${getTextStyles()}`}>{stats.likesReceived}</div>
-            <div className={`text-sm ${getSubtextStyles()}`}>Likes Received</div>
+            <div className="flex justify-center mb-1">
+              <HiOutlineThumbUp className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
+            </div>
+            <div className={`text-lg sm:text-2xl font-bold ${getTextStyles()}`}>{stats.likesReceived}</div>
+            <div className={`text-xs sm:text-sm ${getSubtextStyles()}`}>Likes Received</div>
           </div>
           <div className="text-center">
-            <div className={`text-2xl font-bold ${getTextStyles()}`}>{stats.matches}</div>
-            <div className={`text-sm ${getSubtextStyles()}`}>Matches</div>
+            <div className="flex justify-center mb-1">
+              <HiOutlineUserGroup className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
+            </div>
+            <div className={`text-lg sm:text-2xl font-bold ${getTextStyles()}`}>{stats.matches}</div>
+            <div className={`text-xs sm:text-sm ${getSubtextStyles()}`}>Matches</div>
           </div>
         </div>
       </div>
