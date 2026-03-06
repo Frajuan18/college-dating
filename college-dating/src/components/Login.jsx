@@ -32,23 +32,15 @@ const Login = () => {
           first_name: tgUser.first_name,
           last_name: tgUser.last_name,
           username: tgUser.username,
-          photo_url: tgUser.photo_url,
-          language_code: tgUser.language_code,
-          is_premium: tgUser.is_premium
+          photo_url: tgUser.photo_url
         };
         console.log('Detected Telegram user from WebApp:', telegramUserData);
-        
-        // Save to localStorage for future use
-        localStorage.setItem('telegramUser', JSON.stringify(telegramUserData));
-        localStorage.setItem('telegramId', telegramId);
       } 
-      // Try to get from localStorage
+      // Try to get from localStorage (only as fallback)
       else {
-        const storedTelegramUser = localStorage.getItem('telegramUser');
-        if (storedTelegramUser) {
-          telegramUserData = JSON.parse(storedTelegramUser);
-          telegramId = telegramUserData.id || localStorage.getItem('telegramId');
-          console.log('Detected Telegram user from localStorage:', telegramUserData);
+        const storedTelegramId = localStorage.getItem('telegramId');
+        if (storedTelegramId) {
+          telegramId = storedTelegramId;
         }
       }
 
@@ -98,7 +90,9 @@ const Login = () => {
         ...userData,
         verifications: verifications || [],
         hasVerification: verifications && verifications.length > 0,
-        latestVerification: verifications && verifications.length > 0 ? verifications[0] : null
+        latestVerification: verifications && verifications.length > 0 ? verifications[0] : null,
+        // Get verification status from the latest verification
+        verification_status: verifications && verifications.length > 0 ? verifications[0].status : 'pending'
       };
 
       console.log('User with verification data:', userWithVerification);
@@ -116,37 +110,13 @@ const Login = () => {
     try {
       if (!user) return;
 
-      // Save complete user data to localStorage
-      const userData = {
-        id: user.id,
-        telegram_id: user.telegram_id,
-        first_name: user.first_name || telegramData?.first_name || '',
-        last_name: user.last_name || telegramData?.last_name || '',
-        full_name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-        telegram_username: user.telegram_username || telegramData?.username || '',
-        photo_url: user.photo_url || telegramData?.photo_url || null,
-        language_code: user.language_code || telegramData?.language_code || null,
-        is_premium: user.is_premium || telegramData?.is_premium || false,
-        university_name: user.university_name || (user.latestVerification?.university_name) || '',
-        department: user.department || (user.latestVerification?.department) || '',
-        student_year: user.student_year || (user.latestVerification?.student_year) || '',
-        student_id: user.student_id || (user.latestVerification?.student_id) || '',
-        gender: user.gender || '',
-        verification_status: user.verification_status || (user.latestVerification?.status) || 'pending',
-        bio: user.bio || '',
-        interests: user.interests || [],
-        location: user.location || '',
-        created_at: user.created_at,
-        updated_at: user.updated_at
-      };
-
-      localStorage.setItem('telegramUser', JSON.stringify(userData));
-      localStorage.setItem('telegramId', user.telegram_id);
-      localStorage.setItem('lastUser', JSON.stringify(userData));
+      // Store ONLY the telegram_id in localStorage
+      localStorage.setItem('telegramId', user.telegram_id.toString());
       
-      console.log('Logged in as:', userData.full_name || userData.first_name);
+      console.log('Logged in as:', user.full_name || user.first_name);
+      console.log('Telegram ID stored:', user.telegram_id);
       
-      // Always go to home page regardless of verification status
+      // Always go to home page
       navigate('/home');
       
     } catch (err) {
@@ -156,9 +126,7 @@ const Login = () => {
   };
 
   const handleNewRegistration = () => {
-    // Clear any existing user data and go to registration
-    localStorage.removeItem('lastUser');
-    localStorage.removeItem('telegramUser');
+    // Clear any existing data and go to registration
     localStorage.removeItem('telegramId');
     navigate('/register');
   };
@@ -189,6 +157,51 @@ const Login = () => {
       month: 'long', 
       day: 'numeric' 
     });
+  };
+
+  const getVerificationStatusBadge = () => {
+    if (!user) return null;
+    
+    const status = user.verification_status;
+    
+    switch(status) {
+      case 'approved':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-300 text-xs sm:text-sm rounded-full mb-4">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            Verified Student
+          </span>
+        );
+      case 'pending':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-500/20 text-yellow-300 text-xs sm:text-sm rounded-full mb-4">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+            </svg>
+            Verification Pending
+          </span>
+        );
+      case 'rejected':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-500/20 text-red-300 text-xs sm:text-sm rounded-full mb-4">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            Verification Rejected
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-500/20 text-gray-300 text-xs sm:text-sm rounded-full mb-4">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+            </svg>
+            Not Verified
+          </span>
+        );
+    }
   };
 
   if (loading) {
@@ -295,6 +308,9 @@ const Login = () => {
                     @{user.telegram_username || telegramData?.username}
                   </p>
                 ) : null}
+
+                {/* Verification Status Badge */}
+                {getVerificationStatusBadge()}
 
                 {/* Member Since */}
                 {user.created_at && (
