@@ -26,6 +26,7 @@ const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [user, setUser] = useState(null);
   const [userName, setUserName] = useState('');
+  const [userPhoto, setUserPhoto] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const dropdownRef = useRef(null);
@@ -34,6 +35,9 @@ const Navbar = () => {
     handleScroll();
     window.addEventListener('scroll', handleScroll);
     getUserData();
+    
+    // Add event listener for storage changes (in case user updates profile)
+    window.addEventListener('storage', handleStorageChange);
     
     // Close dropdown when clicking outside
     const handleClickOutside = (event) => {
@@ -46,44 +50,119 @@ const Navbar = () => {
     
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 
-  const handleScroll = () => {
-    setScrolled(window.scrollY > 20);
+  const handleStorageChange = (e) => {
+    if (e.key === 'telegramUser' || e.key === 'telegramId') {
+      getUserData();
+    }
   };
 
   const getUserData = async () => {
     try {
-      const telegramData = JSON.parse(localStorage.getItem('telegramUser') || '{}');
-      const telegramId = telegramData.id || localStorage.getItem('telegramId');
+      // First, try to get complete user data from localStorage
+      const storedTelegramUser = localStorage.getItem('telegramUser');
+      
+      if (storedTelegramUser && storedTelegramUser !== '{}') {
+        try {
+          const userData = JSON.parse(storedTelegramUser);
+          console.log('Navbar: Found stored user data:', userData);
+          
+          // Set user state with all available data
+          setUser(userData);
+          
+          // Set display name with priority: full_name > first_name + last_name > first_name > 'User'
+          const displayName = userData.full_name || 
+                             `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 
+                             userData.first_name || 
+                             'User';
+          setUserName(displayName);
+          
+          // Set photo URL if available
+          setUserPhoto(userData.photo_url || '');
+          
+          return; // Exit early if we have data from localStorage
+        } catch (parseError) {
+          console.error('Error parsing stored user data:', parseError);
+        }
+      }
+
+      // Fallback: Fetch from database if localStorage data is incomplete
+      const telegramId = localStorage.getItem('telegramId');
       
       if (telegramId) {
-        const { data: userData } = await supabase
+        console.log('Navbar: Fetching user data from database for telegram_id:', telegramId);
+        
+        const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('first_name, last_name, verification_status')
+          .select('*')
           .eq('telegram_id', telegramId)
           .maybeSingle();
 
+        if (userError) {
+          console.error('Error fetching user:', userError);
+          return;
+        }
+
         if (userData) {
+          console.log('Navbar: Fetched user data from database:', userData);
+          
+          // Set user state
           setUser(userData);
-          setUserName(`${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'User');
+          
+          // Set display name
+          const displayName = userData.full_name || 
+                             `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 
+                             userData.first_name || 
+                             'User';
+          setUserName(displayName);
+          
+          // Set photo URL
+          setUserPhoto(userData.photo_url || '');
+          
+          // Update localStorage with complete data for future use
+          localStorage.setItem('telegramUser', JSON.stringify({
+            id: userData.telegram_id,
+            telegram_id: userData.telegram_id,
+            first_name: userData.first_name,
+            last_name: userData.last_name,
+            full_name: userData.full_name,
+            photo_url: userData.photo_url,
+            university_name: userData.university_name,
+            department: userData.department,
+            student_year: userData.student_year,
+            gender: userData.gender,
+            verification_status: userData.verification_status,
+            bio: userData.bio,
+            interests: userData.interests,
+            location: userData.location
+          }));
         }
       }
     } catch (error) {
-      console.error('Error fetching user:', error);
+      console.error('Error in getUserData:', error);
     }
   };
 
   const handleLogout = () => {
+    // Clear all user data from localStorage
     localStorage.removeItem('telegramUser');
     localStorage.removeItem('telegramId');
+    localStorage.removeItem('lastUser');
     localStorage.removeItem('isAdmin');
     localStorage.removeItem('formData');
+    
+    setUser(null);
+    setUserName('');
+    setUserPhoto('');
     setShowDropdown(false);
     setIsOpen(false);
-    navigate('/');
+    
+    // Navigate to login page
+    navigate('/login');
   };
 
   // Theme-based styles
@@ -201,10 +280,25 @@ const Navbar = () => {
                       : 'bg-white/10 text-white hover:bg-white/20'
                   }`}
                 >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden ${
                     isDark ? 'bg-gray-700' : 'bg-gradient-to-r from-rose-400 to-pink-500'
                   }`}>
-                    <HiOutlineUser className="w-4 h-4 text-white" />
+                    {userPhoto ? (
+                      <img 
+                        src={userPhoto} 
+                        alt={userName}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.style.display = 'none';
+                          e.target.parentElement.innerHTML = '<span class="text-white text-sm">' + (userName?.[0] || 'U') + '</span>';
+                        }}
+                      />
+                    ) : (
+                      <span className="text-white text-sm font-medium">
+                        {userName?.[0] || 'U'}
+                      </span>
+                    )}
                   </div>
                   <span className="text-sm font-medium hidden lg:block">
                     {userName || 'Profile'}
@@ -313,10 +407,25 @@ const Navbar = () => {
           <div className={`px-4 py-6 space-y-4 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
             {/* User Info */}
             <div className={`flex items-center gap-3 pb-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center overflow-hidden ${
                 isDark ? 'bg-gray-800' : 'bg-gradient-to-r from-rose-400 to-pink-500'
               }`}>
-                <HiOutlineUser className="w-6 h-6 text-white" />
+                {userPhoto ? (
+                  <img 
+                    src={userPhoto} 
+                    alt={userName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.style.display = 'none';
+                      e.target.parentElement.innerHTML = '<span class="text-white text-lg">' + (userName?.[0] || 'U') + '</span>';
+                    }}
+                  />
+                ) : (
+                  <span className="text-white text-lg font-medium">
+                    {userName?.[0] || 'U'}
+                  </span>
+                )}
               </div>
               <div>
                 <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
