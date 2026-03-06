@@ -8,31 +8,55 @@ const Login = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [telegramData, setTelegramData] = useState(null);
 
   useEffect(() => {
-    fetchLastUser();
+    detectTelegramUser();
   }, []);
 
-  const fetchLastUser = async () => {
+  const detectTelegramUser = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Get the last logged in user from localStorage
-      const lastUser = localStorage.getItem('lastUser');
-      const lastUserData = lastUser ? JSON.parse(lastUser) : null;
+      // Get Telegram data from multiple sources
+      let telegramId = null;
+      let telegramUserData = null;
 
-      if (!lastUserData || !lastUserData.id) {
-        // No previous user found
+      // Try to get from window.Telegram if available (Telegram Web App)
+      if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+        const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
+        telegramId = tgUser.id;
+        telegramUserData = {
+          id: tgUser.id,
+          first_name: tgUser.first_name,
+          last_name: tgUser.last_name,
+          username: tgUser.username,
+          photo_url: tgUser.photo_url
+        };
+        console.log('Detected Telegram user from WebApp:', telegramUserData);
+      } 
+      // Try to get from localStorage
+      else {
+        const storedTelegramUser = localStorage.getItem('telegramUser');
+        if (storedTelegramUser) {
+          telegramUserData = JSON.parse(storedTelegramUser);
+          telegramId = telegramUserData.id || telegramUserData.telegram_id;
+          console.log('Detected Telegram user from localStorage:', telegramUserData);
+        }
+      }
+
+      if (!telegramId) {
+        console.log('No Telegram user detected');
         setUser(null);
         setLoading(false);
         return;
       }
 
-      console.log('Last user data:', lastUserData);
+      setTelegramData(telegramUserData);
 
-      // Fetch the complete user data from the users table
-      const { data, error } = await supabase
+      // First, find the user in the users table by telegram_id
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select(`
           id,
@@ -46,23 +70,50 @@ const Login = () => {
           verification_status,
           bio,
           interests,
-          created_at
+          created_at,
+          updated_at
         `)
-        .eq('id', lastUserData.id)
-        .single();
+        .eq('telegram_id', telegramId)
+        .maybeSingle();
 
-      if (error) {
-        console.error('Supabase error:', error);
-        // If user not found in database, clear localStorage
-        localStorage.removeItem('lastUser');
-        setUser(null);
-      } else {
-        console.log('Fetched user:', data);
-        setUser(data);
+      if (userError) {
+        console.error('Error fetching user:', userError);
+        throw userError;
       }
 
+      if (!userData) {
+        console.log('No user found with telegram_id:', telegramId);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      console.log('Found user in users table:', userData);
+
+      // Now check if this user has any verification records
+      const { data: verifications, error: verifError } = await supabase
+        .from('student_verifications')
+        .select('*')
+        .eq('user_id', userData.id)
+        .order('submitted_at', { ascending: false });
+
+      if (verifError) {
+        console.error('Error fetching verifications:', verifError);
+      }
+
+      // Combine user data with verification data
+      const userWithVerification = {
+        ...userData,
+        verifications: verifications || [],
+        hasVerification: verifications && verifications.length > 0,
+        latestVerification: verifications && verifications.length > 0 ? verifications[0] : null
+      };
+
+      console.log('User with verification data:', userWithVerification);
+      setUser(userWithVerification);
+
     } catch (err) {
-      console.error('Error fetching user:', err);
+      console.error('Error detecting Telegram user:', err);
       setError('Failed to load your account. Please try again.');
     } finally {
       setLoading(false);
@@ -73,28 +124,39 @@ const Login = () => {
     try {
       if (!user) return;
 
-      // Save user to localStorage
+      // Save complete user data to localStorage
       const userData = {
         id: user.id,
-        telegram_id: user.telegram_id || user.id,
-        first_name: user.first_name || '',
-        last_name: user.last_name || '',
+        telegram_id: user.telegram_id,
+        first_name: user.first_name || telegramData?.first_name || '',
+        last_name: user.last_name || telegramData?.last_name || '',
         full_name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-        username: user.telegram_username || `${user.first_name?.toLowerCase()}_${user.last_name?.toLowerCase()}`,
-        photo_url: user.photo_url || null,
+        username: telegramData?.username || user.telegram_username || '',
+        photo_url: user.photo_url || telegramData?.photo_url || null,
         university_name: user.university_name || '',
         gender: user.gender || '',
-        verification_status: user.verification_status || 'pending'
+        verification_status: user.verification_status || 'pending',
+        bio: user.bio || '',
+        interests: user.interests || []
       };
 
       localStorage.setItem('telegramUser', JSON.stringify(userData));
-      localStorage.setItem('telegramId', user.telegram_id || user.id);
+      localStorage.setItem('telegramId', user.telegram_id);
       localStorage.setItem('lastUser', JSON.stringify(userData));
       
       console.log('Logged in as:', userData.full_name || userData.first_name);
       
-      // Redirect to home page
-      navigate('/home');
+      // Redirect based on verification status
+      if (user.verification_status === 'verified') {
+        navigate('/home');
+      } else if (user.verification_status === 'pending') {
+        navigate('/verification-pending');
+      } else if (user.verification_status === 'rejected') {
+        navigate('/verification-rejected');
+      } else {
+        // No verification or not verified
+        navigate('/register');
+      }
     } catch (err) {
       console.error('Login error:', err);
       setError('Failed to login. Please try again.');
@@ -137,6 +199,49 @@ const Login = () => {
     });
   };
 
+  const getVerificationStatusBadge = () => {
+    if (!user) return null;
+    
+    switch(user.verification_status) {
+      case 'verified':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-300 text-xs sm:text-sm rounded-full mb-4">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            Verified Student
+          </span>
+        );
+      case 'pending':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-500/20 text-yellow-300 text-xs sm:text-sm rounded-full mb-4">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+            </svg>
+            Verification Pending
+          </span>
+        );
+      case 'rejected':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-500/20 text-red-300 text-xs sm:text-sm rounded-full mb-4">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            Verification Rejected
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-500/20 text-gray-300 text-xs sm:text-sm rounded-full mb-4">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+            </svg>
+            Not Verified
+          </span>
+        );
+    }
+  };
+
   if (loading) {
     return (
       <div className="relative min-h-screen w-full overflow-hidden bg-rose-50">
@@ -152,7 +257,7 @@ const Login = () => {
         <div className="relative z-10 flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-white border-t-transparent mx-auto mb-4"></div>
-            <p className="text-white text-lg">Loading your account...</p>
+            <p className="text-white text-lg">Detecting your account...</p>
           </div>
         </div>
       </div>
@@ -188,7 +293,7 @@ const Login = () => {
               Welcome <span className="text-pink-200">back</span>
             </h1>
             <p className="text-white/90 text-sm sm:text-base md:text-lg max-w-md mx-auto leading-relaxed drop-shadow px-4">
-              {user ? 'Continue with your account' : 'Start your journey today'}
+              {user ? 'Continue with your account' : 'Sign in with Telegram to continue'}
             </p>
             <div className="w-16 sm:w-20 h-1 bg-pink-200 mx-auto mt-3 sm:mt-4 rounded-full" />
           </div>
@@ -206,9 +311,9 @@ const Login = () => {
               <div className="flex flex-col items-center text-center">
                 {/* Profile Picture */}
                 <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-white/50 overflow-hidden mb-4 sm:mb-6 shadow-lg">
-                  {user.photo_url ? (
+                  {user.photo_url || telegramData?.photo_url ? (
                     <img 
-                      src={user.photo_url} 
+                      src={user.photo_url || telegramData?.photo_url} 
                       alt={user.full_name || `${user.first_name} ${user.last_name}`}
                       className="w-full h-full object-cover"
                       onError={(e) => {
@@ -235,15 +340,15 @@ const Login = () => {
                   </p>
                 )}
 
-                {/* Verification Badge */}
-                {user.verification_status === 'verified' && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-300 text-xs sm:text-sm rounded-full mb-4">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    Verified Student
-                  </span>
+                {/* Telegram Username */}
+                {telegramData?.username && (
+                  <p className="text-white/50 text-xs sm:text-sm mb-3">
+                    @{telegramData.username}
+                  </p>
                 )}
+
+                {/* Verification Status Badge */}
+                {getVerificationStatusBadge()}
 
                 {/* Member Since */}
                 {user.created_at && (
@@ -257,7 +362,7 @@ const Login = () => {
                   onClick={handleLogin}
                   className="w-full bg-pink-200 text-rose-600 text-base sm:text-lg font-bold py-3 sm:py-4 px-4 rounded-lg hover:scale-105 transition-transform duration-200 active:scale-95 shadow-xl mb-3"
                 >
-                  Login to Your Account
+                  Login as {user.first_name || 'User'}
                 </button>
 
                 {/* Not you? Option */}
@@ -270,17 +375,17 @@ const Login = () => {
               </div>
             </div>
           ) : (
-            /* No Account Found - Show Register Option */
+            /* No Account Found - Show Telegram Login Option */
             <div className="bg-white/10 backdrop-blur-sm border-2 border-white/30 rounded-xl sm:rounded-2xl p-8 sm:p-10 text-center">
               <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/20 mx-auto mb-4 sm:mb-6 flex items-center justify-center">
                 <svg className="w-10 h-10 sm:w-12 sm:h-12 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
               
               <h2 className="text-white text-xl sm:text-2xl font-bold mb-2">No Account Found</h2>
               <p className="text-white/70 text-sm sm:text-base mb-6 sm:mb-8">
-                Looks like you haven't registered yet. Create your account to start connecting with verified students.
+                We couldn't find an account linked to your Telegram. Create one to start connecting with verified students.
               </p>
 
               <button
