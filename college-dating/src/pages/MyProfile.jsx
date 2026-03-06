@@ -20,11 +20,7 @@ import {
   HiOutlineLogout,
   HiOutlineSave,
   HiOutlineX,
-  HiOutlineMail,
-  HiOutlineUserGroup,
-  HiOutlineEye,
-  HiOutlineThumbUp,
-  HiOutlineStar
+  HiOutlineMail
 } from 'react-icons/hi';
 
 const MyProfile = () => {
@@ -43,26 +39,28 @@ const MyProfile = () => {
   });
   
   const [interestInput, setInterestInput] = useState('');
-  const [verificationStatus, setVerificationStatus] = useState(null);
-  const [verificationData, setVerificationData] = useState(null);
-  const [stats, setStats] = useState({
+  
+  // Stats set to zero
+  const [stats] = useState({
     profileViews: 0,
     likesReceived: 0,
     matches: 0
   });
 
   useEffect(() => {
-    fetchUserProfile();
+    checkUserAndFetchProfile();
   }, []);
 
-  const fetchUserProfile = async () => {
+  const checkUserAndFetchProfile = async () => {
     try {
       // Get current user from localStorage
       const telegramData = JSON.parse(localStorage.getItem('telegramUser') || '{}');
       const telegramId = telegramData.id || localStorage.getItem('telegramId');
       
+      // If no user is logged in, redirect to login
       if (!telegramId) {
-        navigate('/');
+        console.log('No user found, redirecting to login');
+        navigate('/login');
         return;
       }
 
@@ -75,7 +73,12 @@ const MyProfile = () => {
         .eq('telegram_id', telegramId)
         .single();
 
-      if (userError) throw userError;
+      if (userError) {
+        console.error('Error fetching user:', userError);
+        // If user not found in database, redirect to login
+        navigate('/login');
+        return;
+      }
       
       console.log('User data fetched:', userData);
       setUser(userData);
@@ -86,79 +89,11 @@ const MyProfile = () => {
         interests: userData.interests || []
       });
 
-      // Fetch verification status from student_verifications
-      const { data: verificationData, error: verifError } = await supabase
-        .from('student_verifications')
-        .select('*')
-        .eq('user_id', userData.id)
-        .order('submitted_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (verifError && verifError.code !== 'PGRST116') throw verifError;
-
-      if (verificationData) {
-        console.log('Verification data:', verificationData);
-        setVerificationStatus(verificationData.status);
-        setVerificationData(verificationData);
-      }
-
-      // Fetch real stats from database (you'll need to implement these queries)
-      await fetchUserStats(userData.id);
-
     } catch (error) {
       console.error('Error fetching profile:', error);
+      navigate('/login');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchUserStats = async (userId) => {
-    try {
-      // Get profile views count
-      const { count: viewsCount, error: viewsError } = await supabase
-        .from('profile_views')
-        .select('*', { count: 'exact', head: true })
-        .eq('profile_id', userId);
-
-      if (viewsError && viewsError.code !== 'PGRST116') {
-        console.error('Error fetching views:', viewsError);
-      }
-
-      // Get likes received count
-      const { count: likesCount, error: likesError } = await supabase
-        .from('likes')
-        .select('*', { count: 'exact', head: true })
-        .eq('liked_user_id', userId);
-
-      if (likesError && likesError.code !== 'PGRST116') {
-        console.error('Error fetching likes:', likesError);
-      }
-
-      // Get matches count
-      const { count: matchesCount, error: matchesError } = await supabase
-        .from('matches')
-        .select('*', { count: 'exact', head: true })
-        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
-
-      if (matchesError && matchesError.code !== 'PGRST116') {
-        console.error('Error fetching matches:', matchesError);
-      }
-
-      setStats({
-        profileViews: viewsCount || Math.floor(Math.random() * 50) + 10,
-        likesReceived: likesCount || Math.floor(Math.random() * 30) + 5,
-        matches: matchesCount || Math.floor(Math.random() * 15) + 2
-      });
-
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-      // Fallback to random stats if tables don't exist yet
-      setStats({
-        profileViews: Math.floor(Math.random() * 50) + 10,
-        likesReceived: Math.floor(Math.random() * 30) + 5,
-        matches: Math.floor(Math.random() * 15) + 2
-      });
     }
   };
 
@@ -226,47 +161,16 @@ const MyProfile = () => {
   };
 
   const handleLogout = () => {
+    // Clear all localStorage items
     localStorage.removeItem('telegramUser');
     localStorage.removeItem('telegramId');
     localStorage.removeItem('isAdmin');
     localStorage.removeItem('formData');
-    navigate('/');
-  };
-
-  const getVerificationBadge = () => {
-    const status = user?.verification_status || verificationStatus;
     
-    switch(status) {
-      case 'verified':
-      case 'approved':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-green-500/20 text-green-500 border border-green-500/30">
-            <HiOutlineCheckCircle className="w-4 h-4" />
-            Verified Student
-          </span>
-        );
-      case 'pending':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-yellow-500/20 text-yellow-500 border border-yellow-500/30">
-            <HiOutlineClock className="w-4 h-4" />
-            Verification Pending
-          </span>
-        );
-      case 'rejected':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-red-500/20 text-red-500 border border-red-500/30">
-            <HiOutlineXCircle className="w-4 h-4" />
-            Verification Rejected
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-gray-500/20 text-gray-400 border border-gray-500/30">
-            <HiOutlineClock className="w-4 h-4" />
-            Not Verified
-          </span>
-        );
-    }
+    console.log('User logged out, redirecting to login');
+    
+    // Redirect to login page
+    navigate('/login');
   };
 
   const formatDate = (dateString) => {
@@ -297,12 +201,6 @@ const MyProfile = () => {
     return isDark
       ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
       : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500';
-  };
-
-  const getReadOnlyFieldStyles = () => {
-    return isDark
-      ? 'bg-gray-700/50 border-gray-600 text-gray-300'
-      : 'bg-gray-50 border-gray-200 text-gray-600';
   };
 
   if (loading) {
@@ -445,14 +343,11 @@ const MyProfile = () => {
               </div>
             </div>
 
-            {/* Name and Verification */}
+            {/* Name */}
             <div className="text-center mb-4 sm:mb-6">
               <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${getTextStyles()}`}>
                 {user?.full_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
               </h2>
-              <div className="flex justify-center mb-2">
-                {getVerificationBadge()}
-              </div>
               {user?.telegram_username && (
                 <p className={`text-xs sm:text-sm flex items-center justify-center gap-1 ${getSubtextStyles()}`}>
                   <HiOutlineMail className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -489,7 +384,7 @@ const MyProfile = () => {
                   <span className={`text-xs sm:text-sm font-medium ${getTextStyles()}`}>University</span>
                 </div>
                 <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
-                  {user?.university_name || verificationData?.university_name || 'Not specified'}
+                  {user?.university_name || 'Not specified'}
                 </p>
               </div>
 
@@ -500,7 +395,7 @@ const MyProfile = () => {
                   <span className={`text-xs sm:text-sm font-medium ${getTextStyles()}`}>Department</span>
                 </div>
                 <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
-                  {user?.department || verificationData?.department || 'Not specified'}
+                  {user?.department || 'Not specified'}
                 </p>
               </div>
 
@@ -511,7 +406,7 @@ const MyProfile = () => {
                   <span className={`text-xs sm:text-sm font-medium ${getTextStyles()}`}>Year of Study</span>
                 </div>
                 <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
-                  {user?.student_year || verificationData?.student_year || 'Not specified'}
+                  {user?.student_year || 'Not specified'}
                 </p>
               </div>
 
@@ -522,7 +417,7 @@ const MyProfile = () => {
                   <span className={`text-xs sm:text-sm font-medium ${getTextStyles()}`}>Student ID</span>
                 </div>
                 <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
-                  {user?.student_id || verificationData?.student_id || 'Not specified'}
+                  {user?.student_id || 'Not specified'}
                 </p>
               </div>
 
@@ -627,26 +522,17 @@ const MyProfile = () => {
           </div>
         </div>
 
-        {/* Stats Card */}
+        {/* Stats Card - All set to zero */}
         <div className={`grid grid-cols-3 gap-2 sm:gap-4 rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6 border ${getCardStyles()}`}>
           <div className="text-center">
-            <div className="flex justify-center mb-1">
-              <HiOutlineEye className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
-            </div>
             <div className={`text-lg sm:text-2xl font-bold ${getTextStyles()}`}>{stats.profileViews}</div>
             <div className={`text-xs sm:text-sm ${getSubtextStyles()}`}>Profile Views</div>
           </div>
           <div className="text-center border-x border-gray-200 dark:border-gray-700">
-            <div className="flex justify-center mb-1">
-              <HiOutlineThumbUp className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
-            </div>
             <div className={`text-lg sm:text-2xl font-bold ${getTextStyles()}`}>{stats.likesReceived}</div>
             <div className={`text-xs sm:text-sm ${getSubtextStyles()}`}>Likes Received</div>
           </div>
           <div className="text-center">
-            <div className="flex justify-center mb-1">
-              <HiOutlineUserGroup className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
-            </div>
             <div className={`text-lg sm:text-2xl font-bold ${getTextStyles()}`}>{stats.matches}</div>
             <div className={`text-xs sm:text-sm ${getSubtextStyles()}`}>Matches</div>
           </div>
