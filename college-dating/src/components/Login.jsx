@@ -121,13 +121,11 @@ const Login = () => {
     }
   };
 
-  // Login.jsx - Update the handleLogin function with better error handling
+  // In Login.jsx - Update the handleLogin function
   const handleLogin = () => {
     try {
       if (!user) {
         console.error("No user data available for login");
-        setError("No user data found. Please try again.");
-        setIsLoggingIn(false);
         return;
       }
 
@@ -174,31 +172,15 @@ const Login = () => {
       console.log("Saving user data to localStorage:", userData);
 
       // Save to localStorage
-      try {
-        localStorage.setItem("telegramUser", JSON.stringify(userData));
-        localStorage.setItem("telegramId", String(user.telegram_id));
-        localStorage.setItem("lastUser", JSON.stringify(userData));
-
-        // Verify data was saved
-        const savedUser = localStorage.getItem("telegramUser");
-        const savedId = localStorage.getItem("telegramId");
-
-        console.log("Verification - Saved user:", savedUser ? "yes" : "no");
-        console.log("Verification - Saved ID:", savedId);
-
-        if (!savedUser || !savedId) {
-          throw new Error("Failed to save user data to localStorage");
-        }
-      } catch (storageError) {
-        console.error("LocalStorage error:", storageError);
-        throw storageError;
-      }
+      localStorage.setItem("telegramUser", JSON.stringify(userData));
+      localStorage.setItem("telegramId", String(user.telegram_id));
+      localStorage.setItem("lastUser", JSON.stringify(userData));
 
       console.log("Logged in as:", userData.full_name || userData.first_name);
+      console.log("Navigating to /home...");
 
-      // Use window.location for a hard redirect to ensure clean state
-      console.log("Redirecting to /home...");
-      window.location.href = "/home";
+      // Use navigate with replace to prevent going back to login
+      navigate("/home", { replace: true });
     } catch (err) {
       console.error("Login error:", err);
       setError("Failed to login. Please try again.");
