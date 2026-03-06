@@ -146,17 +146,9 @@ const Login = () => {
       
       console.log('Logged in as:', userData.full_name || userData.first_name);
       
-      // Redirect based on verification status
-      if (userData.verification_status === 'verified' || userData.verification_status === 'approved') {
-        navigate('/home');
-      } else if (userData.verification_status === 'pending') {
-        navigate('/verification-pending');
-      } else if (userData.verification_status === 'rejected') {
-        navigate('/verification-rejected');
-      } else {
-        // No verification or not verified
-        navigate('/register');
-      }
+      // Always go to home page regardless of verification status
+      navigate('/home');
+      
     } catch (err) {
       console.error('Login error:', err);
       setError('Failed to login. Please try again.');
@@ -197,52 +189,6 @@ const Login = () => {
       month: 'long', 
       day: 'numeric' 
     });
-  };
-
-  const getVerificationStatusBadge = () => {
-    if (!user) return null;
-    
-    const status = user.verification_status || user.latestVerification?.status;
-    
-    switch(status) {
-      case 'verified':
-      case 'approved':
-        return (
-          <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-300 text-xs sm:text-sm rounded-full mb-4">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            Verified Student
-          </span>
-        );
-      case 'pending':
-        return (
-          <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-500/20 text-yellow-300 text-xs sm:text-sm rounded-full mb-4">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-            </svg>
-            Verification Pending
-          </span>
-        );
-      case 'rejected':
-        return (
-          <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-500/20 text-red-300 text-xs sm:text-sm rounded-full mb-4">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            Verification Rejected
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-500/20 text-gray-300 text-xs sm:text-sm rounded-full mb-4">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-            </svg>
-            Not Verified
-          </span>
-        );
-    }
   };
 
   if (loading) {
@@ -345,13 +291,10 @@ const Login = () => {
 
                 {/* Telegram Username */}
                 {user.telegram_username || telegramData?.username ? (
-                  <p className="text-white/50 text-xs sm:text-sm mb-3">
+                  <p className="text-white/50 text-xs sm:text-sm mb-4">
                     @{user.telegram_username || telegramData?.username}
                   </p>
                 ) : null}
-
-                {/* Verification Status Badge */}
-                {getVerificationStatusBadge()}
 
                 {/* Member Since */}
                 {user.created_at && (
@@ -360,12 +303,12 @@ const Login = () => {
                   </p>
                 )}
 
-                {/* Login Button */}
+                {/* Login Button - Always goes to home */}
                 <button
                   onClick={handleLogin}
                   className="w-full bg-pink-200 text-rose-600 text-base sm:text-lg font-bold py-3 sm:py-4 px-4 rounded-lg hover:scale-105 transition-transform duration-200 active:scale-95 shadow-xl mb-3"
                 >
-                  Login as {user.first_name || 'User'}
+                  Login to MatchMaker
                 </button>
 
                 {/* Not you? Option */}
