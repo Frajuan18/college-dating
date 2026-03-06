@@ -80,13 +80,41 @@ const MyProfile = () => {
         return;
       }
       
-      console.log('User data fetched:', userData);
-      setUser(userData);
+      console.log('User from users table:', userData);
+
+      // Fetch the latest verification for this user
+      const { data: verificationData, error: verificationError } = await supabase
+        .from('student_verifications')
+        .select('*')
+        .eq('user_id', userData.id)
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (verificationError) {
+        console.error('Error fetching verification:', verificationError);
+      }
+
+      console.log('Verification data:', verificationData);
+
+      // Merge user data with verification data
+      const completeUser = {
+        ...userData,
+        full_name: userData.full_name || verificationData?.full_name || '',
+        university_name: userData.university_name || verificationData?.university_name || '',
+        department: userData.department || verificationData?.department || '',
+        student_year: userData.student_year || verificationData?.student_year || '',
+        student_id: userData.student_id || verificationData?.student_id || '',
+        verification_status: userData.verification_status || verificationData?.status || 'pending',
+        verification: verificationData || null
+      };
+      
+      setUser(completeUser);
       
       // Initialize edit form with only bio and interests
       setEditForm({
-        bio: userData.bio || '',
-        interests: userData.interests || []
+        bio: completeUser.bio || '',
+        interests: completeUser.interests || []
       });
 
     } catch (error) {
@@ -166,6 +194,7 @@ const MyProfile = () => {
     localStorage.removeItem('telegramId');
     localStorage.removeItem('isAdmin');
     localStorage.removeItem('formData');
+    localStorage.removeItem('lastUser');
     
     console.log('User logged out, redirecting to login');
     
@@ -181,6 +210,42 @@ const MyProfile = () => {
       month: 'long', 
       day: 'numeric' 
     });
+  };
+
+  const getVerificationBadge = () => {
+    if (!user) return null;
+    
+    switch(user.verification_status) {
+      case 'verified':
+      case 'approved':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-400 text-xs sm:text-sm rounded-full">
+            <HiOutlineCheckCircle className="w-4 h-4" />
+            Verified Student
+          </span>
+        );
+      case 'pending':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-500/20 text-yellow-400 text-xs sm:text-sm rounded-full">
+            <HiOutlineClock className="w-4 h-4" />
+            Verification Pending
+          </span>
+        );
+      case 'rejected':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-500/20 text-red-400 text-xs sm:text-sm rounded-full">
+            <HiOutlineXCircle className="w-4 h-4" />
+            Verification Rejected
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-500/20 text-gray-400 text-xs sm:text-sm rounded-full">
+            <HiOutlineClock className="w-4 h-4" />
+            Not Verified
+          </span>
+        );
+    }
   };
 
   const getCardStyles = () => {
@@ -317,7 +382,7 @@ const MyProfile = () => {
 
         {/* Main Profile Card */}
         <div className={`rounded-xl sm:rounded-2xl shadow-lg overflow-hidden border ${getCardStyles()} mb-4 sm:mb-6`}>
-          {/* Cover Photo - Simplified for mobile */}
+          {/* Cover Photo */}
           <div className="h-20 sm:h-32 bg-gradient-to-r from-rose-400 to-pink-500 relative"></div>
 
           {/* Profile Info */}
@@ -343,11 +408,14 @@ const MyProfile = () => {
               </div>
             </div>
 
-            {/* Name */}
+            {/* Name and Verification */}
             <div className="text-center mb-4 sm:mb-6">
               <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${getTextStyles()}`}>
                 {user?.full_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
               </h2>
+              <div className="flex justify-center mb-2">
+                {getVerificationBadge()}
+              </div>
               {user?.telegram_username && (
                 <p className={`text-xs sm:text-sm flex items-center justify-center gap-1 ${getSubtextStyles()}`}>
                   <HiOutlineMail className="w-3 h-3 sm:w-4 sm:h-4" />
