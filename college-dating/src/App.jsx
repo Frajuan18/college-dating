@@ -9,6 +9,8 @@ import AdminLogin from './pages/admin/login';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import MyProfile from './pages/MyProfile';
 import Login from './components/Login';
+import Matches from './pages/Matches';
+import Notifications from './pages/Notifications';
 
 function App() {
   return (
@@ -22,6 +24,8 @@ function App() {
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/profile" element={<MyProfile />} />
+          <Route path="/matches" element={<Matches />} />
+          <Route path="/notifications" element={<Notifications />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>

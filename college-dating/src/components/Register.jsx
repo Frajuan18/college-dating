@@ -216,7 +216,7 @@ const Register = () => {
                 to="/login"
                 className="text-pink-200 hover:text-white font-semibold transition"
               >
-                Sign in
+                Login
               </Link>
             </p>
           )}
