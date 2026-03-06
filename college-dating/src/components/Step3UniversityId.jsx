@@ -70,7 +70,7 @@ const Step3UniversityId = ({
       if (!user) {
         setSubmitMessage("Creating user account...");
         
-        // Create new user with all the new fields
+        // Create new user with all fields
         const userData = {
           telegram_id: telegramId,
           telegram_username: telegramData.username || formData.telegramUsername || null,
@@ -83,8 +83,15 @@ const Step3UniversityId = ({
           department: formData.department,
           student_year: formData.studentYear,
           student_id: formData.studentId,
-          gender: formData.gender
+          gender: formData.gender,
+          bio: '',
+          interests: [],
+          location: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         };
+
+        console.log("Creating new user:", userData);
 
         const { data: newUser, error: createError } = await supabase
           .from('users')
@@ -92,29 +99,39 @@ const Step3UniversityId = ({
           .select()
           .single();
 
-        if (createError) throw createError;
+        if (createError) {
+          console.error("Create error:", createError);
+          throw createError;
+        }
         user = newUser;
       } else {
         // Update existing user with new information
         setSubmitMessage("Updating user information...");
         
+        const updateData = {
+          full_name: formData.fullName,
+          first_name: formData.fullName?.split(' ')[0] || user.first_name,
+          last_name: formData.fullName?.split(' ').slice(1).join(' ') || user.last_name,
+          university_name: formData.universityName,
+          department: formData.department,
+          student_year: formData.studentYear,
+          student_id: formData.studentId,
+          gender: formData.gender,
+          verification_status: 'pending',
+          updated_at: new Date().toISOString()
+        };
+
+        console.log("Updating user:", updateData);
+
         const { error: updateError } = await supabase
           .from('users')
-          .update({
-            full_name: formData.fullName,
-            first_name: formData.fullName?.split(' ')[0] || user.first_name,
-            last_name: formData.fullName?.split(' ').slice(1).join(' ') || user.last_name,
-            university_name: formData.universityName,
-            department: formData.department,
-            student_year: formData.studentYear,
-            student_id: formData.studentId,
-            gender: formData.gender,
-            verification_status: 'pending',
-            updated_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('id', user.id);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error("Update error:", updateError);
+          throw updateError;
+        }
       }
 
       setUploadProgress(30);
@@ -174,6 +191,7 @@ const Step3UniversityId = ({
         .select();
 
       if (verificationError) {
+        console.error("Verification error:", verificationError);
         // If verification fails, try to delete the uploaded image
         await supabase.storage
           .from('student-ids')
@@ -206,16 +224,19 @@ const Step3UniversityId = ({
   const onFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Check file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         alert("File too large. Maximum size is 5MB");
         return;
       }
       
+      // Check file type
       if (!file.type.startsWith('image/')) {
         alert("Please upload an image file");
         return;
       }
 
+      // Pass to parent's handler
       handleFileUpload("idPhoto", e);
     }
   };
@@ -388,6 +409,33 @@ const Step3UniversityId = ({
             />
             {errors.studentId && (
               <p className="mt-1 text-sm text-pink-200">{errors.studentId}</p>
+            )}
+          </div>
+
+          {/* Gender Selection */}
+          <div>
+            <label className="block text-white font-medium mb-1 drop-shadow">
+              Gender <span className="text-pink-200">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {['male', 'female'].map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => handleChange({ target: { name: 'gender', value: option } })}
+                  className={`p-3 rounded-xl border-2 transition-all capitalize ${
+                    formData.gender === option
+                      ? 'border-pink-200 bg-pink-200/20 text-white'
+                      : 'border-white/30 bg-white/5 text-white/70 hover:border-white/50'
+                  }`}
+                  disabled={isSubmitting}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+            {errors.gender && (
+              <p className="mt-1 text-sm text-pink-200">{errors.gender}</p>
             )}
           </div>
 
