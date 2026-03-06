@@ -71,8 +71,8 @@ const Home = () => {
 
       console.log("Fetching user with telegram_id:", telegramId);
 
-      // Fetch current user from database
-      const { data: user, error: userError } = await supabase
+      // Fetch current user from users table
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
         .eq('telegram_id', telegramId)
@@ -92,24 +92,59 @@ const Home = () => {
         throw userError;
       }
       
-      console.log("Current user fetched:", user);
-      console.log("Current user gender:", user.gender);
+      console.log("User from users table:", userData);
+
+      // Fetch the latest verification for this user from student_verifications table
+      const { data: verificationData, error: verificationError } = await supabase
+        .from('student_verifications')
+        .select('*')
+        .eq('user_id', userData.id)
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (verificationError) {
+        console.error("Error fetching verification:", verificationError);
+      }
+
+      console.log("Verification data:", verificationData);
+
+      // Merge user data with verification data
+      // Priority: userData fields first, then fallback to verificationData
+      const completeUser = {
+        ...userData,
+        // If user table doesn't have these fields, use from verification
+        full_name: userData.full_name || verificationData?.full_name || '',
+        university_name: userData.university_name || verificationData?.university_name || '',
+        department: userData.department || verificationData?.department || '',
+        student_year: userData.student_year || verificationData?.student_year || '',
+        student_id: userData.student_id || verificationData?.student_id || '',
+        // Use verification status from either table
+        verification_status: userData.verification_status || verificationData?.status || 'pending',
+        // Store verification data separately if needed
+        verification: verificationData || null
+      };
+
+      console.log("Complete user data:", completeUser);
       
-      setCurrentUser(user);
+      setCurrentUser(completeUser);
       
-      // Update localStorage with latest user data
+      // Update localStorage with complete user data
       localStorage.setItem('telegramUser', JSON.stringify({
-        id: user.telegram_id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        full_name: user.full_name,
-        photo_url: user.photo_url,
-        university_name: user.university_name,
-        gender: user.gender
+        id: completeUser.telegram_id,
+        first_name: completeUser.first_name,
+        last_name: completeUser.last_name,
+        full_name: completeUser.full_name,
+        photo_url: completeUser.photo_url,
+        university_name: completeUser.university_name,
+        department: completeUser.department,
+        student_year: completeUser.student_year,
+        gender: completeUser.gender,
+        verification_status: completeUser.verification_status
       }));
       
       // Fetch all opposite gender users
-      await fetchOppositeGenderUsers(user);
+      await fetchOppositeGenderUsers(completeUser);
       
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -132,7 +167,7 @@ const Home = () => {
         return;
       }
 
-      // Fetch ALL opposite gender verified users
+      // Fetch ALL opposite gender verified users with their latest verification data
       const { data, error, count } = await supabase
         .from('users')
         .select(`
@@ -162,10 +197,33 @@ const Home = () => {
       }
 
       console.log(`Found ${data.length} ${oppositeGender} users`);
-      console.log("Sample of fetched users:", data.slice(0, 3));
+
+      // For each user, fetch their latest verification data
+      const usersWithVerification = await Promise.all(
+        data.map(async (userData) => {
+          const { data: verification } = await supabase
+            .from('student_verifications')
+            .select('university_name, department, student_year, full_name')
+            .eq('user_id', userData.id)
+            .order('submitted_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          return {
+            ...userData,
+            // Use verification data as fallback
+            university_name: userData.university_name || verification?.university_name || 'University',
+            full_name: userData.full_name || verification?.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'User',
+            department: userData.department || verification?.department || '',
+            student_year: userData.student_year || verification?.student_year || ''
+          };
+        })
+      );
+
+      console.log("Users with verification data:", usersWithVerification.slice(0, 3));
 
       // Format all users for main display
-      const formattedUsers = data.map(match => ({
+      const formattedUsers = usersWithVerification.map(match => ({
         id: match.id,
         name: match.full_name || `${match.first_name || ''} ${match.last_name || ''}`.trim() || 'User',
         age: calculateAge(match.graduation_year),
@@ -273,7 +331,11 @@ const Home = () => {
         {process.env.NODE_ENV === 'development' && (
           <div className="mb-4 p-4 bg-yellow-100 text-yellow-800 rounded-lg">
             <p><strong>Debug:</strong> Logged in as: {userFirstName}</p>
+            <p><strong>Debug:</strong> Full Name: {currentUser?.full_name || 'Not set'}</p>
+            <p><strong>Debug:</strong> University: {currentUser?.university_name || 'Not set'}</p>
+            <p><strong>Debug:</strong> Department: {currentUser?.department || 'Not set'}</p>
             <p><strong>Debug:</strong> User Gender: {currentUser?.gender || 'Not set'}</p>
+            <p><strong>Debug:</strong> Verification Status: {currentUser?.verification_status || 'Not set'}</p>
             <p><strong>Debug:</strong> Showing: {genderDisplayText}</p>
             <p><strong>Debug:</strong> Found {oppositeGenderUsers.length} profiles</p>
           </div>
@@ -289,7 +351,11 @@ const Home = () => {
           </h1>
           <p className={`text-lg max-w-2xl ${getSubtextStyles()}`}>
             {currentUser?.university_name ? (
-              <>Student at <span className="font-semibold text-rose-500">{currentUser.university_name}</span></>
+              <>
+                <span className="font-semibold text-rose-500">{currentUser.university_name}</span>
+                {currentUser?.department && ` • ${currentUser.department}`}
+                {currentUser?.student_year && ` • ${currentUser.student_year}`}
+              </>
             ) : (
               'Discover verified students near you'
             )}
