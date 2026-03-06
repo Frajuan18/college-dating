@@ -14,7 +14,8 @@ import {
   HiOutlineFire,
   HiOutlineStar,
   HiOutlineTrendingUp,
-  HiOutlineUser
+  HiOutlineUser,
+  HiOutlineCheckCircle
 } from 'react-icons/hi';
 
 const Home = () => {
@@ -32,8 +33,31 @@ const Home = () => {
   });
 
   useEffect(() => {
-    fetchCurrentUser();
+    checkUserAndFetch();
   }, []);
+
+  const checkUserAndFetch = async () => {
+    try {
+      // Get user from localStorage (set during login)
+      const storedUser = localStorage.getItem('telegramUser');
+      const telegramId = localStorage.getItem('telegramId');
+      
+      console.log('Stored user:', storedUser);
+      console.log('Telegram ID:', telegramId);
+
+      if (!telegramId && !storedUser) {
+        console.log('No user found, redirecting to login');
+        navigate('/login');
+        return;
+      }
+
+      await fetchCurrentUser();
+      
+    } catch (error) {
+      console.error('Error checking user:', error);
+      navigate('/login');
+    }
+  };
 
   const fetchCurrentUser = async () => {
     try {
@@ -41,13 +65,13 @@ const Home = () => {
       const telegramId = telegramData.id || localStorage.getItem('telegramId');
       
       if (!telegramId) {
-        navigate('/');
+        navigate('/login');
         return;
       }
 
       console.log("Fetching user with telegram_id:", telegramId);
 
-      // Fetch current user
+      // Fetch current user from database
       const { data: user, error: userError } = await supabase
         .from('users')
         .select('*')
@@ -56,6 +80,15 @@ const Home = () => {
 
       if (userError) {
         console.error("Error fetching user:", userError);
+        
+        // If user not found in database but exists in localStorage, clear localStorage and redirect
+        if (userError.code === 'PGRST116') {
+          localStorage.removeItem('telegramUser');
+          localStorage.removeItem('telegramId');
+          localStorage.removeItem('lastUser');
+          navigate('/login');
+          return;
+        }
         throw userError;
       }
       
@@ -63,6 +96,17 @@ const Home = () => {
       console.log("Current user gender:", user.gender);
       
       setCurrentUser(user);
+      
+      // Update localStorage with latest user data
+      localStorage.setItem('telegramUser', JSON.stringify({
+        id: user.telegram_id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        full_name: user.full_name,
+        photo_url: user.photo_url,
+        university_name: user.university_name,
+        gender: user.gender
+      }));
       
       // Fetch all opposite gender users
       await fetchOppositeGenderUsers(user);
@@ -96,6 +140,7 @@ const Home = () => {
           telegram_id,
           first_name,
           last_name,
+          full_name,
           gender,
           photo_url,
           verification_status,
@@ -122,7 +167,7 @@ const Home = () => {
       // Format all users for main display
       const formattedUsers = data.map(match => ({
         id: match.id,
-        name: `${match.first_name || ''} ${match.last_name || ''}`.trim() || 'User',
+        name: match.full_name || `${match.first_name || ''} ${match.last_name || ''}`.trim() || 'User',
         age: calculateAge(match.graduation_year),
         university: match.university_name || 'University',
         image: match.photo_url || (match.gender === 'female' 
@@ -190,21 +235,31 @@ const Home = () => {
     return currentUser.gender === 'male' ? 'Women' : 'Men';
   };
 
+  // Get user's first name for greeting
+  const getUserFirstName = () => {
+    if (currentUser?.first_name) return currentUser.first_name;
+    if (currentUser?.full_name) return currentUser.full_name.split(' ')[0];
+    return 'User';
+  };
+
   if (loading) {
     return (
       <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
         <Navbar />
         <div className="flex items-center justify-center h-[calc(100vh-64px)]">
-          <div className={`animate-spin rounded-full h-16 w-16 border-4 ${
-            isDark ? 'border-gray-700 border-t-rose-500' : 'border-gray-200 border-t-rose-500'
-          }`}></div>
+          <div className="text-center">
+            <div className={`animate-spin rounded-full h-16 w-16 border-4 mx-auto mb-4 ${
+              isDark ? 'border-gray-700 border-t-rose-500' : 'border-gray-200 border-t-rose-500'
+            }`}></div>
+            <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>Loading your matches...</p>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Debug display - show current user info
   const genderDisplayText = getGenderDisplayText();
+  const userFirstName = getUserFirstName();
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
@@ -217,7 +272,8 @@ const Home = () => {
         {/* Debug Info - Remove in production */}
         {process.env.NODE_ENV === 'development' && (
           <div className="mb-4 p-4 bg-yellow-100 text-yellow-800 rounded-lg">
-            <p><strong>Debug:</strong> Current User Gender: {currentUser?.gender || 'Not set'}</p>
+            <p><strong>Debug:</strong> Logged in as: {userFirstName}</p>
+            <p><strong>Debug:</strong> User Gender: {currentUser?.gender || 'Not set'}</p>
             <p><strong>Debug:</strong> Showing: {genderDisplayText}</p>
             <p><strong>Debug:</strong> Found {oppositeGenderUsers.length} profiles</p>
           </div>
@@ -226,10 +282,17 @@ const Home = () => {
         {/* Hero Section */}
         <div className="mb-10">
           <h1 className={`text-4xl md:text-5xl font-bold mb-4 ${getTextStyles()}`}>
-            Hello, <span className="text-rose-500">{currentUser?.first_name || 'User'}</span>
+            Hello, <span className="text-rose-500">{userFirstName}</span>
+            {currentUser?.verification_status === 'verified' && (
+              <HiOutlineCheckCircle className="inline-block ml-2 w-8 h-8 text-green-500" />
+            )}
           </h1>
           <p className={`text-lg max-w-2xl ${getSubtextStyles()}`}>
-            Discover {stats.totalOpposite} verified {genderDisplayText.toLowerCase()} near you.
+            {currentUser?.university_name ? (
+              <>Student at <span className="font-semibold text-rose-500">{currentUser.university_name}</span></>
+            ) : (
+              'Discover verified students near you'
+            )}
           </p>
         </div>
 

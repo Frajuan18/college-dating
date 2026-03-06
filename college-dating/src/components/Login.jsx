@@ -9,6 +9,7 @@ const Login = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [telegramData, setTelegramData] = useState(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
     detectTelegramUser();
@@ -115,6 +116,8 @@ const Login = () => {
   const handleLogin = () => {
     try {
       if (!user) return;
+      
+      setIsLoggingIn(true);
 
       // Save complete user data to localStorage
       const userData = {
@@ -146,12 +149,13 @@ const Login = () => {
       
       console.log('Logged in as:', userData.full_name || userData.first_name);
       
-      // Always go to home page regardless of verification status
+      // Navigate to home page
       navigate('/home');
       
     } catch (err) {
       console.error('Login error:', err);
       setError('Failed to login. Please try again.');
+      setIsLoggingIn(false);
     }
   };
 
@@ -191,7 +195,8 @@ const Login = () => {
     });
   };
 
-  if (loading) {
+  // Show loading state while detecting user or during login
+  if (loading || isLoggingIn) {
     return (
       <div className="relative min-h-screen w-full overflow-hidden bg-rose-50">
         <div 
@@ -203,10 +208,53 @@ const Login = () => {
           <div className="absolute inset-0 bg-gradient-to-b from-rose-900/95 via-rose-800/90 to-rose-900/95" />
           <div className="absolute inset-0 bg-black/20" />
         </div>
-        <div className="relative z-10 flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-white border-t-transparent mx-auto mb-4"></div>
-            <p className="text-white text-lg">Detecting your Telegram account...</p>
+        
+        {/* Navigation Bar */}
+        <nav className="relative z-10 flex justify-between items-center px-4 sm:px-6 py-4 sm:py-6">
+          <Link to="/" className="text-white text-xl sm:text-2xl font-bold tracking-tighter drop-shadow-lg">
+            MATCH<span className="text-pink-200">MAKER</span>
+          </Link>
+        </nav>
+
+        {/* Loading Content */}
+        <div className="relative z-10 flex flex-col items-center justify-center min-h-[calc(100vh-80px)] px-4">
+          <div className="text-center max-w-md">
+            {/* Animated Logo */}
+            <div className="mb-8 animate-pulse">
+              <div className="text-white text-4xl sm:text-5xl font-bold tracking-tighter">
+                MATCH<span className="text-pink-200">MAKER</span>
+              </div>
+            </div>
+
+            {/* Loading Spinner */}
+            <div className="flex justify-center mb-6">
+              <div className="relative">
+                <div className="w-20 h-20 border-4 border-white/20 rounded-full"></div>
+                <div className="absolute top-0 left-0 w-20 h-20 border-4 border-pink-200 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            </div>
+
+            {/* Loading Message */}
+            <h2 className="text-white text-2xl sm:text-3xl font-bold mb-3">
+              {isLoggingIn ? 'Logging you in...' : 'Loading your account...'}
+            </h2>
+            <p className="text-white/70 text-sm sm:text-base mb-8">
+              {isLoggingIn 
+                ? 'Just a moment while we prepare your personalized experience' 
+                : 'Please wait while we detect your Telegram account'}
+            </p>
+
+            {/* Loading Progress Dots */}
+            <div className="flex justify-center gap-2">
+              <div className="w-2 h-2 bg-pink-200 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+              <div className="w-2 h-2 bg-pink-200 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              <div className="w-2 h-2 bg-pink-200 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+            </div>
+
+            {/* Fun Facts Carousel (optional) */}
+            <div className="mt-12 text-white/50 text-xs animate-pulse">
+              <p>Connecting you with verified students...</p>
+            </div>
           </div>
         </div>
       </div>
@@ -303,18 +351,27 @@ const Login = () => {
                   </p>
                 )}
 
-                {/* Login Button - Always goes to home */}
+                {/* Login Button */}
                 <button
                   onClick={handleLogin}
-                  className="w-full bg-pink-200 text-rose-600 text-base sm:text-lg font-bold py-3 sm:py-4 px-4 rounded-lg hover:scale-105 transition-transform duration-200 active:scale-95 shadow-xl mb-3"
+                  disabled={isLoggingIn}
+                  className="w-full bg-pink-200 text-rose-600 text-base sm:text-lg font-bold py-3 sm:py-4 px-4 rounded-lg hover:scale-105 transition-transform duration-200 active:scale-95 shadow-xl mb-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                  Login to MatchMaker
+                  {isLoggingIn ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="w-5 h-5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+                      Logging in...
+                    </span>
+                  ) : (
+                    'Login to MatchMaker'
+                  )}
                 </button>
 
                 {/* Not you? Option */}
                 <button
                   onClick={handleNewRegistration}
-                  className="text-white/70 hover:text-white text-xs sm:text-sm transition"
+                  disabled={isLoggingIn}
+                  className="text-white/70 hover:text-white text-xs sm:text-sm transition disabled:opacity-50"
                 >
                   Not you? Register a new account
                 </button>
