@@ -45,6 +45,8 @@ const Home = () => {
         return;
       }
 
+      console.log("Fetching user with telegram_id:", telegramId);
+
       // Fetch current user
       const { data: user, error: userError } = await supabase
         .from('users')
@@ -52,7 +54,13 @@ const Home = () => {
         .eq('telegram_id', telegramId)
         .single();
 
-      if (userError) throw userError;
+      if (userError) {
+        console.error("Error fetching user:", userError);
+        throw userError;
+      }
+      
+      console.log("Current user fetched:", user);
+      console.log("Current user gender:", user.gender);
       
       setCurrentUser(user);
       
@@ -71,8 +79,15 @@ const Home = () => {
       // Determine opposite gender
       const oppositeGender = user.gender === 'male' ? 'female' : 'male';
       
-      console.log(`Current user gender: ${user.gender}, fetching: ${oppositeGender}`);
+      console.log(`Current user gender: ${user.gender}, fetching opposite gender: ${oppositeGender}`);
       
+      // If user gender is not set, default to showing both? Or handle error
+      if (!user.gender) {
+        console.error("User gender is not set!");
+        setOppositeGenderUsers([]);
+        return;
+      }
+
       // Fetch ALL opposite gender verified users
       const { data, error, count } = await supabase
         .from('users')
@@ -96,9 +111,13 @@ const Home = () => {
         .neq('telegram_id', user.telegram_id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching opposite gender users:", error);
+        throw error;
+      }
 
       console.log(`Found ${data.length} ${oppositeGender} users`);
+      console.log("Sample of fetched users:", data.slice(0, 3));
 
       // Format all users for main display
       const formattedUsers = data.map(match => ({
@@ -133,6 +152,7 @@ const Home = () => {
 
     } catch (error) {
       console.error('Error fetching opposite gender users:', error);
+      setOppositeGenderUsers([]);
     }
   };
 
@@ -164,6 +184,12 @@ const Home = () => {
     return isDark ? 'text-gray-400' : 'text-gray-500';
   };
 
+  // Helper function to get gender display text
+  const getGenderDisplayText = () => {
+    if (!currentUser?.gender) return 'People';
+    return currentUser.gender === 'male' ? 'Women' : 'Men';
+  };
+
   if (loading) {
     return (
       <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -177,7 +203,8 @@ const Home = () => {
     );
   }
 
-  const genderText = currentUser?.gender === 'male' ? 'Women' : 'Men';
+  // Debug display - show current user info
+  const genderDisplayText = getGenderDisplayText();
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
@@ -187,20 +214,29 @@ const Home = () => {
       
       <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         
+        {/* Debug Info - Remove in production */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mb-4 p-4 bg-yellow-100 text-yellow-800 rounded-lg">
+            <p><strong>Debug:</strong> Current User Gender: {currentUser?.gender || 'Not set'}</p>
+            <p><strong>Debug:</strong> Showing: {genderDisplayText}</p>
+            <p><strong>Debug:</strong> Found {oppositeGenderUsers.length} profiles</p>
+          </div>
+        )}
+        
         {/* Hero Section */}
         <div className="mb-10">
           <h1 className={`text-4xl md:text-5xl font-bold mb-4 ${getTextStyles()}`}>
             Hello, <span className="text-rose-500">{currentUser?.first_name || 'User'}</span>
           </h1>
           <p className={`text-lg max-w-2xl ${getSubtextStyles()}`}>
-            Discover {stats.totalOpposite} verified {genderText.toLowerCase()} near you.
+            Discover {stats.totalOpposite} verified {genderDisplayText.toLowerCase()} near you.
           </p>
         </div>
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
           {[
-            { label: genderText, value: stats.totalOpposite, icon: HiOutlineUserGroup },
+            { label: genderDisplayText, value: stats.totalOpposite, icon: HiOutlineUserGroup },
             { label: 'Online Now', value: stats.onlineNow, icon: HiOutlineHeart },
             { label: 'New Today', value: stats.newToday, icon: HiOutlineSparkles },
             { label: 'Your Type', value: '100%', icon: HiOutlineUser },
@@ -227,7 +263,7 @@ const Home = () => {
             <div className="flex items-center gap-2">
               <HiOutlineHeart className={`w-6 h-6 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
               <h2 className={`text-2xl font-bold ${getTextStyles()}`}>
-                All {genderText}
+                All {genderDisplayText}
               </h2>
             </div>
             <span className={`text-sm ${getSubtextStyles()}`}>
@@ -235,64 +271,71 @@ const Home = () => {
             </span>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {oppositeGenderUsers.map((user) => (
-              <div
-                key={user.id}
-                className={`rounded-2xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] cursor-pointer ${getCardStyles()}`}
-                onClick={() => navigate(`/profile/${user.id}`)}
-              >
-                <div className="relative">
-                  <img src={user.image} alt={user.name} className="w-full h-64 object-cover" />
-                  {user.verified && (
-                    <div className="absolute top-3 left-3 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
-                      ✓ Verified
-                    </div>
-                  )}
-                  {user.isNew && (
-                    <div className="absolute top-3 right-3 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
-                      NEW
-                    </div>
-                  )}
-                </div>
-                <div className="p-5">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className={`text-lg font-semibold ${getTextStyles()}`}>{user.name}</h3>
-                    <span className={`text-sm ${getSubtextStyles()}`}>{user.age}</span>
+          {oppositeGenderUsers.length === 0 ? (
+            <div className={`text-center py-12 ${getSubtextStyles()}`}>
+              <p>No {genderDisplayText.toLowerCase()} found yet.</p>
+              <p className="text-sm mt-2">Check back soon!</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {oppositeGenderUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className={`rounded-2xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] cursor-pointer ${getCardStyles()}`}
+                  onClick={() => navigate(`/profile/${user.id}`)}
+                >
+                  <div className="relative">
+                    <img src={user.image} alt={user.name} className="w-full h-64 object-cover" />
+                    {user.verified && (
+                      <div className="absolute top-3 left-3 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                        ✓ Verified
+                      </div>
+                    )}
+                    {user.isNew && (
+                      <div className="absolute top-3 right-3 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                        NEW
+                      </div>
+                    )}
                   </div>
-                  <p className={`text-sm mb-2 flex items-center gap-1 ${getSubtextStyles()}`}>
-                    <HiOutlineAcademicCap className="w-4 h-4" />
-                    {user.university}
-                  </p>
-                  <p className={`text-xs mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
-                    <HiOutlineLocationMarker className="w-3 h-3" />
-                    {user.location}
-                  </p>
-                  <div className="flex flex-wrap gap-1 mb-4">
-                    {user.interests.slice(0, 2).map((interest, i) => (
-                      <span
-                        key={i}
-                        className={`text-xs px-2 py-1 rounded-full ${
-                          isDark 
-                            ? 'bg-gray-700 text-gray-300' 
-                            : 'bg-rose-50 text-rose-600'
-                        }`}
-                      >
-                        {interest}
-                      </span>
-                    ))}
+                  <div className="p-5">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className={`text-lg font-semibold ${getTextStyles()}`}>{user.name}</h3>
+                      <span className={`text-sm ${getSubtextStyles()}`}>{user.age}</span>
+                    </div>
+                    <p className={`text-sm mb-2 flex items-center gap-1 ${getSubtextStyles()}`}>
+                      <HiOutlineAcademicCap className="w-4 h-4" />
+                      {user.university}
+                    </p>
+                    <p className={`text-xs mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
+                      <HiOutlineLocationMarker className="w-3 h-3" />
+                      {user.location}
+                    </p>
+                    <div className="flex flex-wrap gap-1 mb-4">
+                      {user.interests.slice(0, 2).map((interest, i) => (
+                        <span
+                          key={i}
+                          className={`text-xs px-2 py-1 rounded-full ${
+                            isDark 
+                              ? 'bg-gray-700 text-gray-300' 
+                              : 'bg-rose-50 text-rose-600'
+                          }`}
+                        >
+                          {interest}
+                        </span>
+                      ))}
+                    </div>
+                    <button className={`w-full py-2 rounded-xl font-medium transition ${
+                      isDark 
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white' 
+                        : 'bg-rose-500 hover:bg-rose-600 text-white'
+                    }`}>
+                      View Profile
+                    </button>
                   </div>
-                  <button className={`w-full py-2 rounded-xl font-medium transition ${
-                    isDark 
-                      ? 'bg-rose-600 hover:bg-rose-700 text-white' 
-                      : 'bg-rose-500 hover:bg-rose-600 text-white'
-                  }`}>
-                    View Profile
-                  </button>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Trending Section */}
@@ -300,7 +343,7 @@ const Home = () => {
           <section className="mb-12">
             <div className="flex items-center gap-2 mb-6">
               <HiOutlineFire className={`w-6 h-6 ${isDark ? 'text-orange-400' : 'text-orange-500'}`} />
-              <h2 className={`text-2xl font-bold ${getTextStyles()}`}>Popular {genderText}</h2>
+              <h2 className={`text-2xl font-bold ${getTextStyles()}`}>Popular {genderDisplayText}</h2>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -338,7 +381,7 @@ const Home = () => {
           <section className="mb-12">
             <div className="flex items-center gap-2 mb-6">
               <HiOutlineLocationMarker className={`w-6 h-6 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-              <h2 className={`text-2xl font-bold ${getTextStyles()}`}>{genderText} Nearby</h2>
+              <h2 className={`text-2xl font-bold ${getTextStyles()}`}>{genderDisplayText} Nearby</h2>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
