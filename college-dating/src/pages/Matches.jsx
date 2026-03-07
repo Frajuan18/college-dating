@@ -1,11 +1,11 @@
 // pages/Matches.jsx
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTheme } from '../context/ThemeContext';
-import { supabase } from '../lib/supabaseClient';
-import Navbar from '../components/Navbar';
-import { 
-  HiOutlineHeart, 
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTheme } from "../context/ThemeContext";
+import { supabase } from "../lib/supabaseClient";
+import Navbar from "../components/Navbar";
+import {
+  HiOutlineHeart,
   HiOutlineChat,
   HiOutlineUser,
   HiOutlineAcademicCap,
@@ -18,8 +18,8 @@ import {
   HiOutlineClock,
   HiOutlineFilter,
   HiOutlineSearch,
-  HiOutlineRefresh
-} from 'react-icons/hi';
+  HiOutlineRefresh,
+} from "react-icons/hi";
 
 const Matches = () => {
   const navigate = useNavigate();
@@ -28,12 +28,12 @@ const Matches = () => {
   const [matches, setMatches] = useState([]);
   const [filteredMatches, setFilteredMatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('all'); // 'all', 'new', 'messages'
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState("all"); // 'all', 'new', 'messages'
+  const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
-    university: '',
-    interests: []
+    university: "",
+    interests: [],
   });
 
   useEffect(() => {
@@ -42,166 +42,275 @@ const Matches = () => {
 
   const checkUserAndFetch = async () => {
     try {
-      const telegramId = localStorage.getItem('telegramId');
+      const telegramId = localStorage.getItem("telegramId");
 
       if (!telegramId) {
-        console.log('No user found, redirecting to login');
-        navigate('/login');
+        console.log("No user found, redirecting to login");
+        navigate("/login");
         return;
       }
 
       await fetchCurrentUser();
     } catch (error) {
-      console.error('Error checking user:', error);
-      navigate('/login');
+      console.error("Error checking user:", error);
+      navigate("/login");
     }
   };
 
   const fetchCurrentUser = async () => {
     try {
-      const telegramId = localStorage.getItem('telegramId');
+      const telegramId = localStorage.getItem("telegramId");
 
       if (!telegramId) {
-        navigate('/login');
+        navigate("/login");
         return;
       }
 
       // Fetch current user from users table
       const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('telegram_id', parseInt(telegramId))
+        .from("users")
+        .select("*")
+        .eq("telegram_id", parseInt(telegramId))
         .single();
 
       if (userError) {
-        console.error('Error fetching user:', userError);
-        if (userError.code === 'PGRST116') {
-          localStorage.removeItem('telegramId');
-          navigate('/login');
+        console.error("Error fetching user:", userError);
+        if (userError.code === "PGRST116") {
+          localStorage.removeItem("telegramId");
+          navigate("/login");
           return;
         }
         throw userError;
       }
 
       setCurrentUser(userData);
-      
+
       // Fetch matches (opposite gender users)
       await fetchMatches(userData);
-      
     } catch (error) {
-      console.error('Error fetching user:', error);
-      localStorage.removeItem('telegramId');
-      navigate('/login');
+      console.error("Error fetching user:", error);
+      localStorage.removeItem("telegramId");
+      navigate("/login");
     }
   };
+
+  // pages/Matches.jsx - Update the fetchMatches function with detailed logging
 
   const fetchMatches = async (user) => {
     try {
       setLoading(true);
-      
+
       // Determine opposite gender
-      const oppositeGender = user.gender === 'male' ? 'female' : 'male';
+      const oppositeGender = user.gender === "male" ? "female" : "male";
 
-      console.log(`Fetching ${oppositeGender} users for matches`);
+      console.log("========== MATCHES DEBUG ==========");
+      console.log("Current user:", {
+        id: user.id,
+        telegram_id: user.telegram_id,
+        gender: user.gender,
+        name: user.first_name,
+        university: user.university_name,
+      });
+      console.log("Looking for opposite gender:", oppositeGender);
 
-      // Fetch ALL opposite gender users (not just verified)
+      // First, let's check if there are ANY female users in the database
+      const { data: allFemales, error: countError } = await supabase
+        .from("users")
+        .select(
+          "id, gender, first_name, university_name, verification_status",
+          { count: "exact" },
+        )
+        .eq("gender", "female");
+
+      if (countError) {
+        console.error("Error counting females:", countError);
+      } else {
+        console.log(
+          `Total female users in database: ${allFemales?.length || 0}`,
+        );
+        console.log("Sample of female users:", allFemales?.slice(0, 3));
+      }
+
+      // Now fetch ALL opposite gender users (no filters except gender)
       const { data, error } = await supabase
-        .from('users')
-        .select(`
-          id,
-          telegram_id,
-          first_name,
-          last_name,
-          full_name,
-          gender,
-          photo_url,
-          verification_status,
-          university_name,
-          department,
-          student_year,
-          graduation_year,
-          interests,
-          bio,
-          location,
-          created_at
-        `)
-        .eq('gender', oppositeGender)
-        .neq('telegram_id', user.telegram_id)
-        .order('created_at', { ascending: false });
+        .from("users")
+        .select(
+          `
+        id,
+        telegram_id,
+        first_name,
+        last_name,
+        full_name,
+        gender,
+        photo_url,
+        verification_status,
+        university_name,
+        department,
+        student_year,
+        graduation_year,
+        interests,
+        bio,
+        location,
+        created_at,
+        updated_at
+      `,
+        )
+        .eq("gender", oppositeGender)
+        .neq("telegram_id", user.telegram_id); // Exclude current user
 
       if (error) {
-        console.error('Error fetching matches:', error);
+        console.error("Error fetching matches:", error);
         throw error;
       }
 
-      console.log(`Found ${data.length} ${oppositeGender} users`);
+      console.log(
+        `Raw query found ${data?.length || 0} ${oppositeGender} users`,
+      );
 
-      // For each user, fetch their latest verification data to get additional info
+      if (!data || data.length === 0) {
+        console.log(`No ${oppositeGender} users found in database`);
+
+        // Let's check what genders ARE in the database
+        const { data: allUsers } = await supabase
+          .from("users")
+          .select("gender")
+          .limit(10);
+
+        console.log("Sample of all users in DB:", allUsers);
+
+        setMatches([]);
+        setFilteredMatches([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log(`Found ${data.length} ${oppositeGender} users in database`);
+      console.log("First raw user:", data[0]);
+
+      // For each user, fetch their latest verification data
       const usersWithVerification = await Promise.all(
         data.map(async (userData) => {
-          const { data: verification } = await supabase
-            .from('student_verifications')
-            .select('university_name, department, student_year, full_name, status')
-            .eq('user_id', userData.id)
-            .order('submitted_at', { ascending: false })
+          console.log(
+            `Fetching verification for user ${userData.id} (${userData.first_name})`,
+          );
+
+          const { data: verification, error: verifError } = await supabase
+            .from("student_verifications")
+            .select(
+              "university_name, department, student_year, full_name, status",
+            )
+            .eq("user_id", userData.id)
+            .order("submitted_at", { ascending: false })
             .limit(1)
             .maybeSingle();
 
-          return {
+          if (verifError) {
+            console.error(
+              `Error fetching verification for user ${userData.id}:`,
+              verifError,
+            );
+          }
+
+          const enhancedUser = {
             ...userData,
-            // Use verification data as fallback
-            university_name: userData.university_name || verification?.university_name || 'University',
-            department: userData.department || verification?.department || '',
-            student_year: userData.student_year || verification?.student_year || '',
-            full_name: userData.full_name || verification?.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'User',
-            verification_status: userData.verification_status || verification?.status || 'pending',
-            hasVerification: !!verification
+            university_name:
+              userData.university_name ||
+              verification?.university_name ||
+              "University",
+            department: userData.department || verification?.department || "",
+            student_year:
+              userData.student_year || verification?.student_year || "",
+            full_name:
+              userData.full_name ||
+              verification?.full_name ||
+              `${userData.first_name || ""} ${userData.last_name || ""}`.trim() ||
+              "User",
+            verification_status:
+              userData.verification_status || verification?.status || "pending",
+            hasVerification: !!verification,
           };
-        })
+
+          console.log(`Enhanced user ${userData.first_name}:`, {
+            university: enhancedUser.university_name,
+            department: enhancedUser.department,
+            verified: enhancedUser.verification_status,
+          });
+
+          return enhancedUser;
+        }),
+      );
+
+      console.log(
+        `Successfully enhanced ${usersWithVerification.length} users`,
       );
 
       // Calculate match percentage and format users
-      const formattedMatches = usersWithVerification.map(match => {
+      const formattedMatches = usersWithVerification.map((match) => {
         const matchPercentage = calculateMatchPercentage(user, match);
         const isNew = isNewUser(match.created_at);
-        const isOnline = Math.random() > 0.7; // Random online status for demo
-        const hasMessage = Math.random() > 0.8; // Random message status for demo
-        
-        return {
+        const isOnline = Math.random() > 0.7;
+        const hasMessage = Math.random() > 0.8;
+
+        const formattedMatch = {
           id: match.id,
-          name: match.full_name || `${match.first_name || ''} ${match.last_name || ''}`.trim() || 'User',
+          name:
+            match.full_name ||
+            `${match.first_name || ""} ${match.last_name || ""}`.trim() ||
+            "User",
           age: calculateAge(match.graduation_year),
-          university: match.university_name || 'University',
-          department: match.department || '',
-          year: match.student_year || '',
-          location: match.location || 'On Campus',
-          image: match.photo_url || (match.gender === 'female' 
-            ? 'https://images.unsplash.com/photo-1494790108777-406d7f1f3a9f?w=400'
-            : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400'),
-          interests: match.interests || ['Student', 'Friendly'],
+          university: match.university_name || "University",
+          department: match.department || "",
+          year: match.student_year || "",
+          location: match.location || "On Campus",
+          image:
+            match.photo_url ||
+            (match.gender === "female"
+              ? "https://images.unsplash.com/photo-1494790108777-406d7f1f3a9f?w=400"
+              : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400"),
+          interests: match.interests || ["Student", "Friendly"],
           matchPercentage: matchPercentage,
           lastActive: getLastActive(match.updated_at),
           isOnline: isOnline,
           isNew: isNew,
           hasMessage: hasMessage,
-          verified: match.verification_status === 'verified' || match.verification_status === 'approved',
+          verified:
+            match.verification_status === "verified" ||
+            match.verification_status === "approved",
           gender: match.gender,
           compatibility: {
-            interests: calculateInterestCompatibility(user.interests || [], match.interests || []),
-            location: calculateLocationCompatibility(user.location, match.location),
-            university: user.university_name === match.university_name ? 100 : 70
-          }
+            interests: calculateInterestCompatibility(
+              user.interests || [],
+              match.interests || [],
+            ),
+            location: calculateLocationCompatibility(
+              user.location,
+              match.location,
+            ),
+            university:
+              user.university_name === match.university_name ? 100 : 70,
+          },
         };
+
+        console.log(`Formatted match ${formattedMatch.name}:`, {
+          matchPercentage: formattedMatch.matchPercentage,
+          verified: formattedMatch.verified,
+          university: formattedMatch.university,
+        });
+
+        return formattedMatch;
       });
 
       // Sort by match percentage (highest first)
       formattedMatches.sort((a, b) => b.matchPercentage - a.matchPercentage);
 
+      console.log(`Final formatted matches count: ${formattedMatches.length}`);
+      console.log("First 3 formatted matches:", formattedMatches.slice(0, 3));
+      console.log("========== END DEBUG ==========");
+
       setMatches(formattedMatches);
       setFilteredMatches(formattedMatches);
-      
     } catch (error) {
-      console.error('Error fetching matches:', error);
+      console.error("Error fetching matches:", error);
       setMatches([]);
       setFilteredMatches([]);
     } finally {
@@ -225,58 +334,69 @@ const Matches = () => {
   };
 
   const getLastActive = (updatedAt) => {
-    if (!updatedAt) return 'Unknown';
-    
+    if (!updatedAt) return "Unknown";
+
     const now = new Date();
     const lastActive = new Date(updatedAt);
     const diffMinutes = Math.floor((now - lastActive) / (1000 * 60));
     const diffHours = Math.floor(diffMinutes / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes < 1) return "Just now";
     if (diffMinutes < 60) return `${diffMinutes} min ago`;
     if (diffHours < 24) return `${diffHours} hours ago`;
-    if (diffDays === 1) return 'Yesterday';
+    if (diffDays === 1) return "Yesterday";
     return `${diffDays} days ago`;
   };
 
   const calculateMatchPercentage = (user, match) => {
     let percentage = 50; // Base percentage
-    
+
     // Interest compatibility (up to 20%)
     const userInterests = user.interests || [];
     const matchInterests = match.interests || [];
     if (userInterests.length > 0 && matchInterests.length > 0) {
-      const commonInterests = userInterests.filter(interest => matchInterests.includes(interest));
-      percentage += (commonInterests.length / Math.max(userInterests.length, matchInterests.length)) * 20;
+      const commonInterests = userInterests.filter((interest) =>
+        matchInterests.includes(interest),
+      );
+      percentage +=
+        (commonInterests.length /
+          Math.max(userInterests.length, matchInterests.length)) *
+        20;
     }
-    
+
     // University compatibility (up to 15%)
     if (user.university_name && match.university_name) {
       if (user.university_name === match.university_name) {
         percentage += 15;
       }
     }
-    
+
     // Department compatibility (up to 10%)
     if (user.department && match.department) {
       if (user.department === match.department) {
         percentage += 10;
       }
     }
-    
+
     // Verification status (up to 5%)
-    if (match.verification_status === 'verified' || match.verification_status === 'approved') {
+    if (
+      match.verification_status === "verified" ||
+      match.verification_status === "approved"
+    ) {
       percentage += 5;
     }
-    
+
     return Math.min(Math.round(percentage), 100);
   };
 
   const calculateInterestCompatibility = (userInterests, matchInterests) => {
     if (!userInterests.length || !matchInterests.length) return 50;
-    const common = userInterests.filter(i => matchInterests.includes(i));
-    return Math.round((common.length / Math.max(userInterests.length, matchInterests.length)) * 100);
+    const common = userInterests.filter((i) => matchInterests.includes(i));
+    return Math.round(
+      (common.length / Math.max(userInterests.length, matchInterests.length)) *
+        100,
+    );
   };
 
   const calculateLocationCompatibility = (userLoc, matchLoc) => {
@@ -288,33 +408,40 @@ const Matches = () => {
   // Filter matches based on search and filters
   useEffect(() => {
     if (!matches.length) return;
-    
+
     let filtered = [...matches];
 
     // Filter by search query
     if (searchQuery) {
-      filtered = filtered.filter(match => 
-        match.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        match.university.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        match.interests.some(interest => interest.toLowerCase().includes(searchQuery.toLowerCase()))
+      filtered = filtered.filter(
+        (match) =>
+          match.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          match.university.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          match.interests.some((interest) =>
+            interest.toLowerCase().includes(searchQuery.toLowerCase()),
+          ),
       );
     }
 
     // Filter by active tab
-    if (activeTab === 'new') {
-      filtered = filtered.filter(match => match.isNew);
-    } else if (activeTab === 'messages') {
-      filtered = filtered.filter(match => match.hasMessage);
+    if (activeTab === "new") {
+      filtered = filtered.filter((match) => match.isNew);
+    } else if (activeTab === "messages") {
+      filtered = filtered.filter((match) => match.hasMessage);
     }
 
     // Apply filters
     if (filters.university) {
-      filtered = filtered.filter(match => match.university === filters.university);
+      filtered = filtered.filter(
+        (match) => match.university === filters.university,
+      );
     }
 
     if (filters.interests.length > 0) {
-      filtered = filtered.filter(match => 
-        filters.interests.some(interest => match.interests.includes(interest))
+      filtered = filtered.filter((match) =>
+        filters.interests.some((interest) =>
+          match.interests.includes(interest),
+        ),
       );
     }
 
@@ -323,71 +450,78 @@ const Matches = () => {
 
   const getCardStyles = () => {
     return isDark
-      ? 'bg-gray-800 border-gray-700 hover:border-gray-600'
-      : 'bg-white border-gray-100 hover:border-rose-200';
+      ? "bg-gray-800 border-gray-700 hover:border-gray-600"
+      : "bg-white border-gray-100 hover:border-rose-200";
   };
 
   const getTextStyles = () => {
-    return isDark ? 'text-white' : 'text-gray-900';
+    return isDark ? "text-white" : "text-gray-900";
   };
 
   const getSubtextStyles = () => {
-    return isDark ? 'text-gray-400' : 'text-gray-500';
+    return isDark ? "text-gray-400" : "text-gray-500";
   };
 
   const getActiveTabStyles = (tab) => {
-    const baseStyles = "px-4 py-2 rounded-full text-sm font-medium transition-all";
+    const baseStyles =
+      "px-4 py-2 rounded-full text-sm font-medium transition-all";
     if (activeTab === tab) {
       return `${baseStyles} bg-rose-500 text-white shadow-lg`;
     }
-    return `${baseStyles} ${isDark ? 'text-gray-400 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-rose-600 hover:bg-rose-50'}`;
+    return `${baseStyles} ${isDark ? "text-gray-400 hover:text-white hover:bg-gray-700" : "text-gray-600 hover:text-rose-600 hover:bg-rose-50"}`;
   };
 
   const getMatchPercentageColor = (percentage) => {
-    if (percentage >= 90) return 'text-green-500';
-    if (percentage >= 80) return 'text-yellow-500';
-    if (percentage >= 70) return 'text-orange-500';
-    return 'text-gray-500';
+    if (percentage >= 90) return "text-green-500";
+    if (percentage >= 80) return "text-yellow-500";
+    if (percentage >= 70) return "text-orange-500";
+    return "text-gray-500";
   };
 
   const getUniqueUniversities = () => {
-    const universities = [...new Set(matches.map(m => m.university))];
+    const universities = [...new Set(matches.map((m) => m.university))];
     return universities;
   };
 
   const getUniqueInterests = () => {
-    const allInterests = matches.flatMap(m => m.interests);
+    const allInterests = matches.flatMap((m) => m.interests);
     return [...new Set(allInterests)];
   };
 
   const handleFilterChange = (type, value) => {
-    if (type === 'university') {
-      setFilters(prev => ({ ...prev, university: value }));
-    } else if (type === 'interest') {
-      setFilters(prev => ({
+    if (type === "university") {
+      setFilters((prev) => ({ ...prev, university: value }));
+    } else if (type === "interest") {
+      setFilters((prev) => ({
         ...prev,
         interests: prev.interests.includes(value)
-          ? prev.interests.filter(i => i !== value)
-          : [...prev.interests, value]
+          ? prev.interests.filter((i) => i !== value)
+          : [...prev.interests, value],
       }));
     }
   };
 
   const clearFilters = () => {
-    setFilters({ university: '', interests: [] });
-    setSearchQuery('');
+    setFilters({ university: "", interests: [] });
+    setSearchQuery("");
   };
 
   if (loading) {
     return (
-      <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div className={`min-h-screen ${isDark ? "bg-gray-900" : "bg-gray-50"}`}>
         <Navbar />
         <div className="flex items-center justify-center h-[calc(100vh-64px)]">
           <div className="text-center">
-            <div className={`animate-spin rounded-full h-16 w-16 border-4 mx-auto mb-4 ${
-              isDark ? 'border-gray-700 border-t-rose-500' : 'border-gray-200 border-t-rose-500'
-            }`}></div>
-            <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>Finding your matches...</p>
+            <div
+              className={`animate-spin rounded-full h-16 w-16 border-4 mx-auto mb-4 ${
+                isDark
+                  ? "border-gray-700 border-t-rose-500"
+                  : "border-gray-200 border-t-rose-500"
+              }`}
+            ></div>
+            <p className={isDark ? "text-gray-400" : "text-gray-600"}>
+              Finding your matches...
+            </p>
           </div>
         </div>
       </div>
@@ -395,32 +529,37 @@ const Matches = () => {
   }
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${
-      isDark ? 'bg-gray-900' : 'bg-gray-50'
-    }`}>
+    <div
+      className={`min-h-screen transition-colors duration-300 ${
+        isDark ? "bg-gray-900" : "bg-gray-50"
+      }`}
+    >
       <Navbar />
-      
+
       <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        
         {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className={`text-3xl sm:text-4xl font-bold mb-2 ${getTextStyles()}`}>
+              <h1
+                className={`text-3xl sm:text-4xl font-bold mb-2 ${getTextStyles()}`}
+              >
                 Your Matches
               </h1>
               <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
-                {filteredMatches.length} {filteredMatches.length === 1 ? 'person' : 'people'} you might like
+                {filteredMatches.length}{" "}
+                {filteredMatches.length === 1 ? "person" : "people"} you might
+                like
               </p>
             </div>
-            
+
             {/* Filter Button */}
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-medium transition ${
                 isDark
-                  ? 'bg-gray-800 text-white hover:bg-gray-700'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md'
+                  ? "bg-gray-800 text-white hover:bg-gray-700"
+                  : "bg-white text-gray-700 hover:bg-gray-50 shadow-md"
               }`}
             >
               <HiOutlineFilter className="w-5 h-5" />
@@ -433,9 +572,11 @@ const Matches = () => {
 
           {/* Search Bar */}
           <div className="mt-4 relative">
-            <HiOutlineSearch className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${
-              isDark ? 'text-gray-500' : 'text-gray-400'
-            }`} />
+            <HiOutlineSearch
+              className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${
+                isDark ? "text-gray-500" : "text-gray-400"
+              }`}
+            />
             <input
               type="text"
               placeholder="Search by name, university, or interests..."
@@ -443,23 +584,29 @@ const Matches = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               className={`w-full pl-10 pr-4 py-3 rounded-xl border transition ${
                 isDark
-                  ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-rose-500'
-                  : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400 focus:border-rose-500 shadow-sm'
+                  ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-rose-500"
+                  : "bg-white border-gray-200 text-gray-900 placeholder-gray-400 focus:border-rose-500 shadow-sm"
               }`}
             />
           </div>
 
           {/* Filters Panel */}
           {showFilters && (
-            <div className={`mt-4 p-4 rounded-xl border ${
-              isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-            }`}>
+            <div
+              className={`mt-4 p-4 rounded-xl border ${
+                isDark
+                  ? "bg-gray-800 border-gray-700"
+                  : "bg-white border-gray-200"
+              }`}
+            >
               <div className="flex justify-between items-center mb-4">
                 <h3 className={`font-semibold ${getTextStyles()}`}>Filters</h3>
                 <button
                   onClick={clearFilters}
                   className={`text-sm flex items-center gap-1 ${
-                    isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-700'
+                    isDark
+                      ? "text-gray-400 hover:text-white"
+                      : "text-gray-500 hover:text-gray-700"
                   }`}
                 >
                   <HiOutlineRefresh className="w-4 h-4" />
@@ -469,46 +616,56 @@ const Matches = () => {
 
               {/* University Filter */}
               <div className="mb-4">
-                <label className={`block text-sm font-medium mb-2 ${getTextStyles()}`}>
+                <label
+                  className={`block text-sm font-medium mb-2 ${getTextStyles()}`}
+                >
                   University
                 </label>
                 <select
                   value={filters.university}
-                  onChange={(e) => handleFilterChange('university', e.target.value)}
+                  onChange={(e) =>
+                    handleFilterChange("university", e.target.value)
+                  }
                   className={`w-full px-3 py-2 rounded-lg border ${
                     isDark
-                      ? 'bg-gray-700 border-gray-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-900'
+                      ? "bg-gray-700 border-gray-600 text-white"
+                      : "bg-white border-gray-300 text-gray-900"
                   }`}
                 >
                   <option value="">All Universities</option>
-                  {getUniqueUniversities().map(uni => (
-                    <option key={uni} value={uni}>{uni}</option>
+                  {getUniqueUniversities().map((uni) => (
+                    <option key={uni} value={uni}>
+                      {uni}
+                    </option>
                   ))}
                 </select>
               </div>
 
               {/* Interests Filter */}
               <div>
-                <label className={`block text-sm font-medium mb-2 ${getTextStyles()}`}>
+                <label
+                  className={`block text-sm font-medium mb-2 ${getTextStyles()}`}
+                >
                   Interests
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {getUniqueInterests().slice(0, 15).map(interest => (
-                    <button
-                      key={interest}
-                      onClick={() => handleFilterChange('interest', interest)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                        filters.interests.includes(interest)
-                          ? 'bg-rose-500 text-white'
-                          : isDark
-                            ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {interest}
-                    </button>
-                  ))}
+                  {getUniqueInterests()
+                    .slice(0, 15)
+                    .map((interest) => (
+                      <button
+                        key={interest}
+                        onClick={() => handleFilterChange("interest", interest)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                          filters.interests.includes(interest)
+                            ? "bg-rose-500 text-white"
+                            : isDark
+                              ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        {interest}
+                      </button>
+                    ))}
                 </div>
               </div>
             </div>
@@ -517,34 +674,42 @@ const Matches = () => {
           {/* Tabs */}
           <div className="flex gap-2 mt-6 overflow-x-auto pb-2">
             <button
-              onClick={() => setActiveTab('all')}
-              className={getActiveTabStyles('all')}
+              onClick={() => setActiveTab("all")}
+              className={getActiveTabStyles("all")}
             >
               All Matches
             </button>
             <button
-              onClick={() => setActiveTab('new')}
-              className={getActiveTabStyles('new')}
+              onClick={() => setActiveTab("new")}
+              className={getActiveTabStyles("new")}
             >
               New
-              {matches.filter(m => m.isNew).length > 0 && (
-                <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
-                  activeTab === 'new' ? 'bg-white text-rose-500' : 'bg-rose-500 text-white'
-                }`}>
-                  {matches.filter(m => m.isNew).length}
+              {matches.filter((m) => m.isNew).length > 0 && (
+                <span
+                  className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
+                    activeTab === "new"
+                      ? "bg-white text-rose-500"
+                      : "bg-rose-500 text-white"
+                  }`}
+                >
+                  {matches.filter((m) => m.isNew).length}
                 </span>
               )}
             </button>
             <button
-              onClick={() => setActiveTab('messages')}
-              className={getActiveTabStyles('messages')}
+              onClick={() => setActiveTab("messages")}
+              className={getActiveTabStyles("messages")}
             >
               Messages
-              {matches.filter(m => m.hasMessage).length > 0 && (
-                <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
-                  activeTab === 'messages' ? 'bg-white text-rose-500' : 'bg-rose-500 text-white'
-                }`}>
-                  {matches.filter(m => m.hasMessage).length}
+              {matches.filter((m) => m.hasMessage).length > 0 && (
+                <span
+                  className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
+                    activeTab === "messages"
+                      ? "bg-white text-rose-500"
+                      : "bg-rose-500 text-white"
+                  }`}
+                >
+                  {matches.filter((m) => m.hasMessage).length}
                 </span>
               )}
             </button>
@@ -556,7 +721,9 @@ const Matches = () => {
           <div className={`text-center py-12 ${getSubtextStyles()}`}>
             <HiOutlineHeart className="w-16 h-16 mx-auto mb-4 opacity-50" />
             <p className="text-lg mb-2">No matches found</p>
-            <p className="text-sm">Try adjusting your filters or search query</p>
+            <p className="text-sm">
+              Try adjusting your filters or search query
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -568,12 +735,12 @@ const Matches = () => {
               >
                 {/* Image Container */}
                 <div className="relative">
-                  <img 
-                    src={match.image} 
-                    alt={match.name} 
+                  <img
+                    src={match.image}
+                    alt={match.name}
                     className="w-full h-64 object-cover"
                   />
-                  
+
                   {/* Badges */}
                   <div className="absolute top-3 left-3 flex gap-2">
                     {match.verified && (
@@ -598,9 +765,11 @@ const Matches = () => {
                   )}
 
                   {/* Match Percentage */}
-                  <div className={`absolute bottom-3 right-3 px-2 py-1 rounded-lg text-xs font-bold ${
-                    isDark ? 'bg-gray-900/90' : 'bg-white/90'
-                  } ${getMatchPercentageColor(match.matchPercentage)}`}>
+                  <div
+                    className={`absolute bottom-3 right-3 px-2 py-1 rounded-lg text-xs font-bold ${
+                      isDark ? "bg-gray-900/90" : "bg-white/90"
+                    } ${getMatchPercentageColor(match.matchPercentage)}`}
+                  >
                     {match.matchPercentage}% Match
                   </div>
                 </div>
@@ -615,7 +784,9 @@ const Matches = () => {
                   </div>
 
                   {/* University */}
-                  <p className={`text-sm mb-2 flex items-center gap-1 ${getSubtextStyles()}`}>
+                  <p
+                    className={`text-sm mb-2 flex items-center gap-1 ${getSubtextStyles()}`}
+                  >
                     <HiOutlineAcademicCap className="w-4 h-4" />
                     {match.university} {match.year && `• ${match.year}`}
                   </p>
@@ -628,7 +799,9 @@ const Matches = () => {
                   )}
 
                   {/* Location */}
-                  <p className={`text-xs mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
+                  <p
+                    className={`text-xs mb-3 flex items-center gap-1 ${getSubtextStyles()}`}
+                  >
                     <HiOutlineLocationMarker className="w-3 h-3" />
                     {match.location}
                   </p>
@@ -639,18 +812,22 @@ const Matches = () => {
                       <span
                         key={i}
                         className={`text-xs px-2 py-1 rounded-full ${
-                          isDark 
-                            ? 'bg-gray-700 text-gray-300' 
-                            : 'bg-rose-50 text-rose-600'
+                          isDark
+                            ? "bg-gray-700 text-gray-300"
+                            : "bg-rose-50 text-rose-600"
                         }`}
                       >
                         {interest}
                       </span>
                     ))}
                     {match.interests.length > 3 && (
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500'
-                      }`}>
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full ${
+                          isDark
+                            ? "bg-gray-700 text-gray-400"
+                            : "bg-gray-100 text-gray-500"
+                        }`}
+                      >
                         +{match.interests.length - 3}
                       </span>
                     )}
@@ -666,19 +843,23 @@ const Matches = () => {
                     {/* Action Buttons */}
                     <div className="flex gap-2">
                       {match.hasMessage && (
-                        <button className={`p-2 rounded-full transition ${
-                          isDark 
-                            ? 'bg-rose-600/20 text-rose-400 hover:bg-rose-600/30' 
-                            : 'bg-rose-100 text-rose-600 hover:bg-rose-200'
-                        }`}>
+                        <button
+                          className={`p-2 rounded-full transition ${
+                            isDark
+                              ? "bg-rose-600/20 text-rose-400 hover:bg-rose-600/30"
+                              : "bg-rose-100 text-rose-600 hover:bg-rose-200"
+                          }`}
+                        >
                           <HiOutlineChat className="w-4 h-4" />
                         </button>
                       )}
-                      <button className={`p-2 rounded-full transition ${
-                        isDark 
-                          ? 'bg-rose-600 text-white hover:bg-rose-700' 
-                          : 'bg-rose-500 text-white hover:bg-rose-600'
-                      }`}>
+                      <button
+                        className={`p-2 rounded-full transition ${
+                          isDark
+                            ? "bg-rose-600 text-white hover:bg-rose-700"
+                            : "bg-rose-500 text-white hover:bg-rose-600"
+                        }`}
+                      >
                         <HiOutlineHeart className="w-4 h-4" />
                       </button>
                     </div>
@@ -688,18 +869,28 @@ const Matches = () => {
                   <div className="mt-4">
                     <div className="flex justify-between text-xs mb-1">
                       <span className={getSubtextStyles()}>Compatibility</span>
-                      <span className={getMatchPercentageColor(match.matchPercentage)}>
+                      <span
+                        className={getMatchPercentageColor(
+                          match.matchPercentage,
+                        )}
+                      >
                         {match.matchPercentage}%
                       </span>
                     </div>
-                    <div className={`w-full h-1 rounded-full ${
-                      isDark ? 'bg-gray-700' : 'bg-gray-200'
-                    }`}>
-                      <div 
+                    <div
+                      className={`w-full h-1 rounded-full ${
+                        isDark ? "bg-gray-700" : "bg-gray-200"
+                      }`}
+                    >
+                      <div
                         className={`h-1 rounded-full ${
-                          match.matchPercentage >= 90 ? 'bg-green-500' :
-                          match.matchPercentage >= 80 ? 'bg-yellow-500' :
-                          match.matchPercentage >= 70 ? 'bg-orange-500' : 'bg-gray-400'
+                          match.matchPercentage >= 90
+                            ? "bg-green-500"
+                            : match.matchPercentage >= 80
+                              ? "bg-yellow-500"
+                              : match.matchPercentage >= 70
+                                ? "bg-orange-500"
+                                : "bg-gray-400"
                         }`}
                         style={{ width: `${match.matchPercentage}%` }}
                       ></div>
@@ -717,8 +908,8 @@ const Matches = () => {
             <button
               className={`px-6 py-3 rounded-xl font-medium transition ${
                 isDark
-                  ? 'bg-gray-800 text-white hover:bg-gray-700'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md'
+                  ? "bg-gray-800 text-white hover:bg-gray-700"
+                  : "bg-white text-gray-700 hover:bg-gray-50 shadow-md"
               }`}
             >
               Load More Matches
