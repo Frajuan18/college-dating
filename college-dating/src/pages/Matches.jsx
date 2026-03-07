@@ -279,6 +279,7 @@ const Matches = () => {
 
   // In your Matches.jsx, update the handleSendMessage function:
 
+  // In Matches.jsx - Fix the handleSendMessage function
   const handleSendMessage = async (receiverId, content) => {
     try {
       console.log("Sending message to:", receiverId);
@@ -289,7 +290,8 @@ const Matches = () => {
         content,
       );
 
-      if (result.success) {
+      // Check result.success properly
+      if (result && result.success === true) {
         console.log("Message sent successfully:", result.data);
 
         // Update local state to show conversation started
@@ -301,17 +303,21 @@ const Matches = () => {
           ),
         );
 
-        // Show success message
+        // Show ONLY success message
         alert("Message sent successfully!");
 
-        // The modal will close automatically via onClose in MessageModal
-        // DO NOT NAVIGATE HERE
+        // The modal will close via onClose in MessageModal
+        return { success: true };
       } else {
+        // Show ONLY error message
+        console.error("Send failed:", result.error);
         alert(result.error || "Failed to send message");
+        return { success: false, error: result.error };
       }
     } catch (error) {
       console.error("Error sending message:", error);
       alert("Failed to send message. Please try again.");
+      return { success: false, error: error.message };
     }
   };
 
@@ -856,8 +862,7 @@ const Matches = () => {
                       <HiOutlineClock className="inline w-3 h-3 mr-1" />
                       {match.lastActive}
                     </p>
-                    // This is the button in your match card - it should ONLY
-                    open the modal
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation(); // VERY IMPORTANT - prevents the card click
