@@ -11,6 +11,7 @@ import MyProfile from './pages/MyProfile';
 import Login from './components/Login';
 import Matches from './pages/Matches';
 import Notifications from './pages/Notifications';
+import Messages from './pages/Messages';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
           <Route path="/profile" element={<MyProfile />} />
           <Route path="/matches" element={<Matches />} />
           <Route path="/notifications" element={<Notifications />} />
+          <Route path="/messages" element={<Messages />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>
