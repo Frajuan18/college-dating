@@ -7,7 +7,8 @@ export const messageService = {
     try {
       console.log('Sending message:', { senderId, receiverId, content });
 
-      const { data, error } = await supabase
+      // Simple insert without joins first
+      const { data: messageData, error: messageError } = await supabase
         .from('messages')
         .insert([
           {
@@ -18,20 +19,44 @@ export const messageService = {
             created_at: new Date().toISOString()
           }
         ])
-        .select(`
-          *,
-          sender:sender_id(id, first_name, last_name, full_name, photo_url, university_name),
-          receiver:receiver_id(id, first_name, last_name, full_name, photo_url, university_name)
-        `)
+        .select()
         .single();
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+      if (messageError) {
+        console.error('Supabase error:', messageError);
+        throw messageError;
       }
 
-      console.log('Message sent successfully:', data);
-      return { success: true, data };
+      // Then fetch the complete message with sender and receiver info separately
+      const { data: senderData, error: senderError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, full_name, photo_url, university_name')
+        .eq('id', senderId)
+        .single();
+
+      if (senderError) {
+        console.error('Error fetching sender:', senderError);
+      }
+
+      const { data: receiverData, error: receiverError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, full_name, photo_url, university_name')
+        .eq('id', receiverId)
+        .single();
+
+      if (receiverError) {
+        console.error('Error fetching receiver:', receiverError);
+      }
+
+      // Combine the data
+      const completeMessage = {
+        ...messageData,
+        sender: senderData || null,
+        receiver: receiverData || null
+      };
+
+      console.log('Message sent successfully:', completeMessage);
+      return { success: true, data: completeMessage };
     } catch (error) {
       console.error('Error sending message:', error);
       return { 
@@ -47,27 +72,10 @@ export const messageService = {
     try {
       console.log('Fetching conversations for user:', userId);
 
-      const { data, error } = await supabase
+      // First get all messages for this user
+      const { data: messages, error } = await supabase
         .from('messages')
-        .select(`
-          *,
-          sender:sender_id(
-            id, 
-            first_name, 
-            last_name, 
-            full_name, 
-            photo_url, 
-            university_name
-          ),
-          receiver:receiver_id(
-            id, 
-            first_name, 
-            last_name, 
-            full_name, 
-            photo_url, 
-            university_name
-          )
-        `)
+        .select('*')
         .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .order('created_at', { ascending: false });
 
@@ -76,40 +84,74 @@ export const messageService = {
         throw error;
       }
 
+      if (!messages || messages.length === 0) {
+        return { success: true, data: [] };
+      }
+
+      // Get all unique user IDs from messages
+      const userIds = new Set();
+      messages.forEach(msg => {
+        userIds.add(msg.sender_id);
+        userIds.add(msg.receiver_id);
+      });
+
+      // Fetch all users involved in one query
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, full_name, photo_url, university_name')
+        .in('id', Array.from(userIds));
+
+      if (usersError) {
+        console.error('Error fetching users:', usersError);
+      }
+
+      // Create a map of user data for easy lookup
+      const userMap = {};
+      if (users) {
+        users.forEach(user => {
+          userMap[user.id] = user;
+        });
+      }
+
       // Group messages by conversation
-      const conversations = [];
       const conversationMap = new Map();
 
-      data.forEach(message => {
-        const otherUser = message.sender_id === userId ? message.receiver : message.sender;
-        const conversationId = [message.sender_id, message.receiver_id].sort().join('_');
+      messages.forEach(msg => {
+        const otherUserId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
+        const otherUser = userMap[otherUserId] || { 
+          id: otherUserId,
+          first_name: 'Unknown',
+          last_name: '',
+          full_name: 'Unknown User',
+          photo_url: null,
+          university_name: null
+        };
+        
+        const conversationId = [msg.sender_id, msg.receiver_id].sort().join('_');
         
         if (!conversationMap.has(conversationId)) {
           conversationMap.set(conversationId, {
             id: conversationId,
             otherUser: otherUser,
-            lastMessage: message,
-            unreadCount: message.receiver_id === userId && message.status === 'sent' ? 1 : 0,
-            messages: [message]
+            lastMessage: msg,
+            unreadCount: msg.receiver_id === userId && msg.status === 'sent' ? 1 : 0,
+            messages: [msg]
           });
         } else {
           const conv = conversationMap.get(conversationId);
-          conv.messages.push(message);
-          if (message.receiver_id === userId && message.status === 'sent') {
+          conv.messages.push(msg);
+          if (msg.receiver_id === userId && msg.status === 'sent') {
             conv.unreadCount++;
           }
           // Keep the latest message as lastMessage
-          if (new Date(message.created_at) > new Date(conv.lastMessage.created_at)) {
-            conv.lastMessage = message;
+          if (new Date(msg.created_at) > new Date(conv.lastMessage.created_at)) {
+            conv.lastMessage = msg;
           }
         }
       });
 
       // Convert map to array and sort by last message time
-      conversationMap.forEach(conv => {
-        conversations.push(conv);
-      });
-
+      const conversations = Array.from(conversationMap.values());
       conversations.sort((a, b) => 
         new Date(b.lastMessage.created_at) - new Date(a.lastMessage.created_at)
       );
@@ -131,25 +173,9 @@ export const messageService = {
     try {
       console.log('Fetching messages between', userId1, 'and', userId2);
 
-      const { data, error } = await supabase
+      const { data: messages, error } = await supabase
         .from('messages')
-        .select(`
-          *,
-          sender:sender_id(
-            id, 
-            first_name, 
-            last_name, 
-            full_name, 
-            photo_url
-          ),
-          receiver:receiver_id(
-            id, 
-            first_name, 
-            last_name, 
-            full_name, 
-            photo_url
-          )
-        `)
+        .select('*')
         .or(`and(sender_id.eq.${userId1},receiver_id.eq.${userId2}),and(sender_id.eq.${userId2},receiver_id.eq.${userId1})`)
         .order('created_at', { ascending: true });
 
@@ -158,8 +184,32 @@ export const messageService = {
         throw error;
       }
 
-      console.log(`Found ${data.length} messages`);
-      return { success: true, data };
+      // Fetch sender and receiver info
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, full_name, photo_url')
+        .in('id', [userId1, userId2]);
+
+      if (usersError) {
+        console.error('Error fetching users:', usersError);
+      }
+
+      const userMap = {};
+      if (users) {
+        users.forEach(user => {
+          userMap[user.id] = user;
+        });
+      }
+
+      // Add user info to messages
+      const messagesWithUsers = messages.map(msg => ({
+        ...msg,
+        sender: userMap[msg.sender_id] || null,
+        receiver: userMap[msg.receiver_id] || null
+      }));
+
+      console.log(`Found ${messages.length} messages`);
+      return { success: true, data: messagesWithUsers };
     } catch (error) {
       console.error('Error fetching messages:', error);
       return { 
@@ -175,19 +225,9 @@ export const messageService = {
     try {
       console.log('Fetching message requests for user:', userId);
 
-      const { data, error } = await supabase
+      const { data: messages, error } = await supabase
         .from('messages')
-        .select(`
-          *,
-          sender:sender_id(
-            id, 
-            first_name, 
-            last_name, 
-            full_name, 
-            photo_url, 
-            university_name
-          )
-        `)
+        .select('*')
         .eq('receiver_id', userId)
         .eq('status', 'sent')
         .order('created_at', { ascending: false });
@@ -197,8 +237,45 @@ export const messageService = {
         throw error;
       }
 
-      console.log(`Found ${data.length} message requests`);
-      return { success: true, data };
+      if (!messages || messages.length === 0) {
+        return { success: true, data: [] };
+      }
+
+      // Get all sender IDs
+      const senderIds = messages.map(msg => msg.sender_id);
+      
+      // Fetch sender info
+      const { data: senders, error: sendersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, full_name, photo_url, university_name')
+        .in('id', senderIds);
+
+      if (sendersError) {
+        console.error('Error fetching senders:', sendersError);
+      }
+
+      const senderMap = {};
+      if (senders) {
+        senders.forEach(sender => {
+          senderMap[sender.id] = sender;
+        });
+      }
+
+      // Add sender info to messages
+      const messagesWithSenders = messages.map(msg => ({
+        ...msg,
+        sender: senderMap[msg.sender_id] || {
+          id: msg.sender_id,
+          first_name: 'Unknown',
+          last_name: '',
+          full_name: 'Unknown User',
+          photo_url: null,
+          university_name: null
+        }
+      }));
+
+      console.log(`Found ${messages.length} message requests`);
+      return { success: true, data: messagesWithSenders };
     } catch (error) {
       console.error('Error fetching message requests:', error);
       return { 
@@ -221,16 +298,7 @@ export const messageService = {
           updated_at: new Date().toISOString()
         })
         .eq('id', messageId)
-        .select(`
-          *,
-          sender:sender_id(
-            id, 
-            first_name, 
-            last_name, 
-            full_name, 
-            photo_url
-          )
-        `)
+        .select()
         .single();
 
       if (error) {
@@ -261,16 +329,7 @@ export const messageService = {
           updated_at: new Date().toISOString()
         })
         .eq('id', messageId)
-        .select(`
-          *,
-          sender:sender_id(
-            id, 
-            first_name, 
-            last_name, 
-            full_name, 
-            photo_url
-          )
-        `)
+        .select()
         .single();
 
       if (error) {
@@ -343,7 +402,7 @@ export const messageService = {
     }
   },
 
-  // Delete a message (optional)
+  // Delete a message
   async deleteMessage(messageId, userId) {
     try {
       console.log('Deleting message:', messageId);
@@ -352,7 +411,7 @@ export const messageService = {
         .from('messages')
         .delete()
         .eq('id', messageId)
-        .eq('sender_id', userId); // Only sender can delete
+        .eq('sender_id', userId);
 
       if (error) {
         console.error('Supabase error:', error);
