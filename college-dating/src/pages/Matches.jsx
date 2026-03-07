@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabaseClient';
 import Navbar from '../components/Navbar';
-import MessageModal from '../components/MessageModal';
+import MessageModal from '../components/MessagesModal';
 import { 
   HiOutlineHeart, 
   HiOutlineChat,
