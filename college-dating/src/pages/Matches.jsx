@@ -5,6 +5,7 @@ import { useTheme } from "../context/ThemeContext";
 import { supabase } from "../lib/supabaseClient";
 import Navbar from "../components/Navbar";
 import MessageModal from "../components/MessageModal";
+import { messageService } from "../services/messageService";
 import {
   HiOutlineHeart,
   HiOutlineChat,
