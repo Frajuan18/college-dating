@@ -18,7 +18,10 @@ import {
   HiOutlineClock,
   HiOutlineFilter,
   HiOutlineSearch,
-  HiOutlineRefresh
+  HiOutlineRefresh,
+  HiOutlinePaperAirplane,
+  HiOutlineCheck,
+  HiOutlineX
 } from 'react-icons/hi';
 
 const Matches = () => {
@@ -35,6 +38,24 @@ const Matches = () => {
     university: '',
     interests: []
   });
+  
+  // Message modal state
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [messageText, setMessageText] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+
+  // Suggested messages
+  const suggestedMessages = [
+    "Hey! I saw we have similar interests. Want to chat?",
+    "Hi! I'm also studying at the same university. How's your semester going?",
+    "Hey! I noticed you're into the same hobbies. What do you think about...",
+    "Hi there! Your profile caught my attention. Would love to connect!",
+    "Hey! I'm also in the same department. Which classes are you taking?",
+    "Hi! I see we have a high match percentage. Want to get to know each other?",
+    "Hey! Your bio is interesting. Tell me more about yourself!",
+    "Hi! I'm new here and looking to meet new people. How are you?"
+  ];
 
   useEffect(() => {
     checkUserAndFetch();
@@ -66,7 +87,6 @@ const Matches = () => {
         return;
       }
 
-      // Fetch current user from users table
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
@@ -86,7 +106,6 @@ const Matches = () => {
       console.log('Current user:', userData);
       setCurrentUser(userData);
       
-      // Fetch matches (opposite gender users)
       await fetchMatches(userData);
       
     } catch (error) {
@@ -100,12 +119,8 @@ const Matches = () => {
     try {
       setLoading(true);
       
-      // Determine opposite gender
       const oppositeGender = user.gender === 'male' ? 'female' : 'male';
 
-      console.log(`Fetching ${oppositeGender} users for matches`);
-
-      // Step 1: Fetch all opposite gender users from users table
       const { data: users, error: usersError } = await supabase
         .from('users')
         .select(`
@@ -131,9 +146,6 @@ const Matches = () => {
         throw usersError;
       }
 
-      console.log(`Found ${users.length} ${oppositeGender} users in users table`);
-
-      // Step 2: For each user, fetch their verification data from student_verifications
       const matchesWithVerification = await Promise.all(
         users.map(async (matchUser) => {
           const { data: verification, error: verifError } = await supabase
@@ -148,10 +160,16 @@ const Matches = () => {
             console.error(`Error fetching verification for user ${matchUser.id}:`, verifError);
           }
 
-          // Combine user data with verification data
+          // Check if there's an existing conversation
+          const { data: conversation } = await supabase
+            .from('messages')
+            .select('*')
+            .or(`and(sender_id.eq.${user.id},receiver_id.eq.${matchUser.id}),and(sender_id.eq.${matchUser.id},receiver_id.eq.${user.id})`)
+            .limit(1)
+            .maybeSingle();
+
           const completeUser = {
             id: matchUser.id,
-            // Basic info from users table
             first_name: matchUser.first_name,
             last_name: matchUser.last_name,
             full_name: matchUser.full_name || verification?.full_name || 
@@ -163,32 +181,25 @@ const Matches = () => {
             verification_status: matchUser.verification_status || verification?.status || 'pending',
             created_at: matchUser.created_at,
             updated_at: matchUser.updated_at,
-            
-            // Academic info from verification table
             university_name: verification?.university_name || '',
             department: verification?.department || '',
             student_year: verification?.student_year || '',
-            
-            // Computed fields
             hasVerification: !!verification,
-            age: calculateAgeFromVerification(verification?.student_year)
+            age: calculateAgeFromVerification(verification?.student_year),
+            hasConversation: !!conversation,
+            conversationId: conversation?.id
           };
 
           return completeUser;
         })
       );
 
-      // Step 3: Filter out users with no verification data (optional - remove if you want to show unverified users)
       const verifiedMatches = matchesWithVerification.filter(match => match.hasVerification);
       
-      console.log(`Found ${verifiedMatches.length} ${oppositeGender} users with verification data`);
-
-      // Step 4: Format matches for display
       const formattedMatches = verifiedMatches.map(match => {
         const matchPercentage = calculateMatchPercentage(user, match);
         const isNew = isNewUser(match.created_at);
-        const isOnline = Math.random() > 0.7; // You can replace with real online status later
-        const hasMessage = Math.random() > 0.8; // You can replace with real message count later
+        const isOnline = Math.random() > 0.7;
         
         return {
           id: match.id,
@@ -207,9 +218,10 @@ const Matches = () => {
           lastActive: getLastActive(match.updated_at),
           isOnline: isOnline,
           isNew: isNew,
-          hasMessage: hasMessage,
           verified: match.verification_status === 'verified' || match.verification_status === 'approved',
           gender: match.gender,
+          hasConversation: match.hasConversation,
+          conversationId: match.conversationId,
           compatibility: {
             interests: calculateInterestCompatibility(user.interests || [], match.interests || []),
             location: calculateLocationCompatibility(user.location, match.location),
@@ -218,10 +230,8 @@ const Matches = () => {
         };
       });
 
-      // Sort by match percentage (highest first)
       formattedMatches.sort((a, b) => b.matchPercentage - a.matchPercentage);
 
-      console.log(`Final formatted matches: ${formattedMatches.length}`);
       setMatches(formattedMatches);
       setFilteredMatches(formattedMatches);
       
@@ -234,11 +244,68 @@ const Matches = () => {
     }
   };
 
+  // Message functions
+  const handleSendMessage = async () => {
+    if (!selectedMatch || !messageText.trim()) return;
+
+    setSendingMessage(true);
+
+    try {
+      // Create a new conversation/message
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([
+          {
+            sender_id: currentUser.id,
+            receiver_id: selectedMatch.id,
+            content: messageText,
+            status: 'sent',
+            created_at: new Date().toISOString()
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+
+      console.log('Message sent:', data);
+
+      // Update local state
+      setMatches(prevMatches => 
+        prevMatches.map(match => 
+          match.id === selectedMatch.id 
+            ? { ...match, hasConversation: true, conversationId: data[0].id }
+            : match
+        )
+      );
+
+      setShowMessageModal(false);
+      setSelectedMatch(null);
+      setMessageText('');
+
+      // Navigate to messages page
+      navigate('/messages');
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleOpenMessageModal = (match, e) => {
+    e.stopPropagation(); // Prevent card click
+    setSelectedMatch(match);
+    setShowMessageModal(true);
+  };
+
+  const handleSuggestMessage = (suggestion) => {
+    setMessageText(suggestion);
+  };
+
   // Helper functions
   const calculateAgeFromVerification = (studentYear) => {
-    // Rough estimate based on student year
     if (!studentYear) return 22;
-    
     const yearMap = {
       '1st Year': 19,
       '2nd Year': 20,
@@ -248,7 +315,6 @@ const Matches = () => {
       'Graduate': 24,
       'PhD': 26
     };
-    
     return yearMap[studentYear] || 22;
   };
 
@@ -262,7 +328,6 @@ const Matches = () => {
 
   const getLastActive = (updatedAt) => {
     if (!updatedAt) return 'Unknown';
-    
     const now = new Date();
     const lastActive = new Date(updatedAt);
     const diffMinutes = Math.floor((now - lastActive) / (1000 * 60));
@@ -277,31 +342,27 @@ const Matches = () => {
   };
 
   const calculateMatchPercentage = (user, match) => {
-    let percentage = 50; // Base percentage
-    
-    // Interest compatibility (up to 20%)
+    let percentage = 50;
     const userInterests = user.interests || [];
     const matchInterests = match.interests || [];
+    
     if (userInterests.length > 0 && matchInterests.length > 0) {
       const commonInterests = userInterests.filter(interest => matchInterests.includes(interest));
       percentage += (commonInterests.length / Math.max(userInterests.length, matchInterests.length)) * 20;
     }
     
-    // University compatibility (up to 15%)
     if (user.university_name && match.university_name) {
       if (user.university_name === match.university_name) {
         percentage += 15;
       }
     }
     
-    // Department compatibility (up to 10%)
     if (user.department && match.department) {
       if (user.department === match.department) {
         percentage += 10;
       }
     }
     
-    // Verification status (up to 5%)
     if (match.verification_status === 'verified' || match.verification_status === 'approved') {
       percentage += 5;
     }
@@ -320,13 +381,12 @@ const Matches = () => {
     return userLoc === matchLoc ? 95 : 75;
   };
 
-  // Filter matches based on search and filters
+  // Filter matches
   useEffect(() => {
     if (!matches.length) return;
     
     let filtered = [...matches];
 
-    // Filter by search query
     if (searchQuery) {
       filtered = filtered.filter(match => 
         match.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -335,14 +395,12 @@ const Matches = () => {
       );
     }
 
-    // Filter by active tab
     if (activeTab === 'new') {
       filtered = filtered.filter(match => match.isNew);
     } else if (activeTab === 'messages') {
-      filtered = filtered.filter(match => match.hasMessage);
+      filtered = filtered.filter(match => match.hasConversation);
     }
 
-    // Apply filters
     if (filters.university) {
       filtered = filtered.filter(match => match.university === filters.university);
     }
@@ -413,21 +471,6 @@ const Matches = () => {
     setSearchQuery('');
   };
 
-  // Temporary debug panel - remove after fixing
-  const runDebug = async () => {
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, first_name, gender')
-      .limit(5);
-    console.log("Sample users:", users);
-
-    const { data: verifications } = await supabase
-      .from('student_verifications')
-      .select('user_id, university_name, department, student_year')
-      .limit(5);
-    console.log("Sample verifications:", verifications);
-  };
-
   if (loading) {
     return (
       <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -452,23 +495,6 @@ const Matches = () => {
       
       <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         
-        {/* Debug Panel - Remove after fixing */}
-        <div className={`mb-6 p-4 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-white'} border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-          <h3 className={`font-bold mb-2 ${getTextStyles()}`}>Debug Info</h3>
-          <p className={`text-sm mb-2 ${getSubtextStyles()}`}>
-            Current User: {currentUser?.first_name} ({currentUser?.gender})
-          </p>
-          <p className={`text-sm mb-2 ${getSubtextStyles()}`}>
-            Matches Found: {matches.length}
-          </p>
-          <button
-            onClick={runDebug}
-            className="px-3 py-1 bg-blue-500 text-white rounded text-sm"
-          >
-            Check Database
-          </button>
-        </div>
-        
         {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -481,7 +507,6 @@ const Matches = () => {
               </p>
             </div>
             
-            {/* Filter Button */}
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-medium transition ${
@@ -534,7 +559,6 @@ const Matches = () => {
                 </button>
               </div>
 
-              {/* University Filter */}
               <div className="mb-4">
                 <label className={`block text-sm font-medium mb-2 ${getTextStyles()}`}>
                   University
@@ -555,7 +579,6 @@ const Matches = () => {
                 </select>
               </div>
 
-              {/* Interests Filter */}
               <div>
                 <label className={`block text-sm font-medium mb-2 ${getTextStyles()}`}>
                   Interests
@@ -607,11 +630,11 @@ const Matches = () => {
               className={getActiveTabStyles('messages')}
             >
               Messages
-              {matches.filter(m => m.hasMessage).length > 0 && (
+              {matches.filter(m => m.hasConversation).length > 0 && (
                 <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
                   activeTab === 'messages' ? 'bg-white text-rose-500' : 'bg-rose-500 text-white'
                 }`}>
-                  {matches.filter(m => m.hasMessage).length}
+                  {matches.filter(m => m.hasConversation).length}
                 </span>
               )}
             </button>
@@ -657,14 +680,12 @@ const Matches = () => {
                     )}
                   </div>
 
-                  {/* Online Status */}
                   {match.isOnline && (
                     <div className="absolute top-3 right-3">
                       <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                     </div>
                   )}
 
-                  {/* Match Percentage */}
                   <div className={`absolute bottom-3 right-3 px-2 py-1 rounded-lg text-xs font-bold ${
                     isDark ? 'bg-gray-900/90' : 'bg-white/90'
                   } ${getMatchPercentageColor(match.matchPercentage)}`}>
@@ -674,14 +695,12 @@ const Matches = () => {
 
                 {/* Content */}
                 <div className="p-5">
-                  {/* Name and Age */}
                   <div className="flex justify-between items-start mb-2">
                     <h3 className={`text-lg font-semibold ${getTextStyles()}`}>
                       {match.name}, {match.age}
                     </h3>
                   </div>
 
-                  {/* University from verification table */}
                   {match.university && (
                     <p className={`text-sm mb-2 flex items-center gap-1 ${getSubtextStyles()}`}>
                       <HiOutlineAcademicCap className="w-4 h-4" />
@@ -689,27 +708,23 @@ const Matches = () => {
                     </p>
                   )}
 
-                  {/* Department from verification table */}
                   {match.department && (
                     <p className={`text-xs mb-2 ${getSubtextStyles()}`}>
                       {match.department}
                     </p>
                   )}
 
-                  {/* Location from users table */}
                   <p className={`text-xs mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
                     <HiOutlineLocationMarker className="w-3 h-3" />
                     {match.location}
                   </p>
 
-                  {/* Bio from users table (truncated) */}
                   {match.bio && (
                     <p className={`text-xs mb-3 line-clamp-2 ${getSubtextStyles()}`}>
                       "{match.bio.substring(0, 60)}..."
                     </p>
                   )}
 
-                  {/* Interests from users table */}
                   <div className="flex flex-wrap gap-1 mb-4">
                     {match.interests.slice(0, 3).map((interest, i) => (
                       <span
@@ -732,35 +747,42 @@ const Matches = () => {
                     )}
                   </div>
 
-                  {/* Last Active */}
                   <div className="flex items-center justify-between">
                     <p className={`text-xs ${getSubtextStyles()}`}>
                       <HiOutlineClock className="inline w-3 h-3 mr-1" />
                       {match.lastActive}
                     </p>
 
-                    {/* Action Buttons */}
                     <div className="flex gap-2">
-                      {match.hasMessage && (
-                        <button className={`p-2 rounded-full transition ${
-                          isDark 
-                            ? 'bg-rose-600/20 text-rose-400 hover:bg-rose-600/30' 
-                            : 'bg-rose-100 text-rose-600 hover:bg-rose-200'
-                        }`}>
+                      {match.hasConversation ? (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate('/messages');
+                          }}
+                          className={`p-2 rounded-full transition ${
+                            isDark 
+                              ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30' 
+                              : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                          }`}
+                        >
                           <HiOutlineChat className="w-4 h-4" />
                         </button>
+                      ) : (
+                        <button 
+                          onClick={(e) => handleOpenMessageModal(match, e)}
+                          className={`p-2 rounded-full transition ${
+                            isDark 
+                              ? 'bg-rose-600 text-white hover:bg-rose-700' 
+                              : 'bg-rose-500 text-white hover:bg-rose-600'
+                          }`}
+                        >
+                          <HiOutlinePaperAirplane className="w-4 h-4" />
+                        </button>
                       )}
-                      <button className={`p-2 rounded-full transition ${
-                        isDark 
-                          ? 'bg-rose-600 text-white hover:bg-rose-700' 
-                          : 'bg-rose-500 text-white hover:bg-rose-600'
-                      }`}>
-                        <HiOutlineHeart className="w-4 h-4" />
-                      </button>
                     </div>
                   </div>
 
-                  {/* Compatibility Bar */}
                   <div className="mt-4">
                     <div className="flex justify-between text-xs mb-1">
                       <span className={getSubtextStyles()}>Compatibility</span>
@@ -787,6 +809,98 @@ const Matches = () => {
           </div>
         )}
       </div>
+
+      {/* Message Modal */}
+      {showMessageModal && selectedMatch && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" onClick={() => setShowMessageModal(false)}>
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <div className={`inline-block align-bottom rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full ${
+              isDark ? 'bg-gray-800' : 'bg-white'
+            }`}>
+              <div className={`px-4 pt-5 pb-4 sm:p-6 sm:pb-4 ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                    <h3 className={`text-lg leading-6 font-medium ${getTextStyles()}`}>
+                      Send Message to {selectedMatch.name}
+                    </h3>
+                    
+                    {/* Suggested Messages */}
+                    <div className="mt-4">
+                      <p className={`text-sm mb-2 ${getSubtextStyles()}`}>Suggested messages:</p>
+                      <div className="space-y-2">
+                        {suggestedMessages.slice(0, 4).map((suggestion, index) => (
+                          <button
+                            key={index}
+                            onClick={() => handleSuggestMessage(suggestion)}
+                            className={`w-full text-left p-2 rounded-lg text-sm transition ${
+                              isDark 
+                                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Message Input */}
+                    <div className="mt-4">
+                      <label className={`block text-sm font-medium mb-2 ${getTextStyles()}`}>
+                        Your Message
+                      </label>
+                      <textarea
+                        value={messageText}
+                        onChange={(e) => setMessageText(e.target.value)}
+                        rows="4"
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          isDark
+                            ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                            : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                        }`}
+                        placeholder="Type your message here..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className={`px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse ${
+                isDark ? 'bg-gray-900' : 'bg-gray-50'
+              }`}>
+                <button
+                  type="button"
+                  onClick={handleSendMessage}
+                  disabled={sendingMessage || !messageText.trim()}
+                  className={`w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm ${
+                    sendingMessage || !messageText.trim()
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {sendingMessage ? 'Sending...' : 'Send Message'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMessageModal(false)}
+                  className={`mt-3 w-full inline-flex justify-center rounded-lg border px-4 py-2 text-base font-medium sm:mt-0 sm:w-auto sm:text-sm ${
+                    isDark
+                      ? 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
