@@ -150,18 +150,23 @@ const Messages = () => {
   const handleSelectConversation = async (conversation) => {
     setSelectedConversation(conversation);
     
-    // Fetch full message history
+    // Fetch full message history between the two users
     const result = await messageService.getMessages(
       currentUser.id,
       conversation.otherUser.id
     );
 
     if (result.success) {
-      setMessages(result.data);
+      // Sort messages by date (oldest first for proper conversation flow)
+      const sortedMessages = result.data.sort((a, b) => 
+        new Date(a.created_at) - new Date(b.created_at)
+      );
+      
+      setMessages(sortedMessages);
       
       // Mark messages as read if any are unread
       if (conversation.unreadCount > 0) {
-        const unreadMessages = result.data.filter(
+        const unreadMessages = sortedMessages.filter(
           msg => msg.receiver_id === currentUser.id && msg.status === 'sent'
         );
         
