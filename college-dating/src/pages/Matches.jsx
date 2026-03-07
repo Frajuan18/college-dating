@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabaseClient';
 import Navbar from '../components/Navbar';
-import MessageModal from '../components/MessagesModal';
+import MessageModal from '../components/MessageModal';
 import { 
   HiOutlineHeart, 
   HiOutlineChat,
@@ -20,7 +20,8 @@ import {
   HiOutlineFilter,
   HiOutlineSearch,
   HiOutlineRefresh,
-  HiOutlinePaperAirplane
+  HiOutlinePaperAirplane,
+  HiOutlineBell
 } from 'react-icons/hi';
 
 const Matches = () => {
@@ -41,10 +42,16 @@ const Matches = () => {
   // Message modal state
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
   useEffect(() => {
     checkUserAndFetch();
   }, []);
+
+  const showNotification = (message, type = 'success') => {
+    setNotification({ show: true, message, type });
+    setTimeout(() => setNotification({ show: false, message: '', type: '' }), 3000);
+  };
 
   const checkUserAndFetch = async () => {
     try {
@@ -231,14 +238,15 @@ const Matches = () => {
 
   // Message functions
   const handleOpenMessageModal = (match, e) => {
-    e.stopPropagation(); // Prevent card click
+    e.stopPropagation();
     setSelectedMatch(match);
     setShowMessageModal(true);
   };
 
   const handleSendMessage = async (receiverId, content) => {
     try {
-      const { error } = await supabase
+      // Insert message into database
+      const { data, error } = await supabase
         .from('messages')
         .insert([
           {
@@ -248,9 +256,12 @@ const Matches = () => {
             status: 'sent',
             created_at: new Date().toISOString()
           }
-        ]);
+        ])
+        .select();
 
       if (error) throw error;
+
+      console.log('Message sent:', data);
 
       // Update local state to show conversation started
       setMatches(prevMatches => 
@@ -261,12 +272,17 @@ const Matches = () => {
         )
       );
 
-      // Navigate to messages page
-      navigate('/messages');
+      // Show success notification
+      showNotification('Message sent successfully!', 'success');
+
+      // Navigate to messages page after short delay
+      setTimeout(() => {
+        navigate('/messages');
+      }, 1500);
       
     } catch (error) {
       console.error('Error sending message:', error);
-      alert('Failed to send message. Please try again.');
+      showNotification('Failed to send message. Please try again.', 'error');
     }
   };
 
@@ -461,6 +477,24 @@ const Matches = () => {
       <Navbar />
       
       <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        
+        {/* Notification Toast */}
+        {notification.show && (
+          <div className={`fixed top-24 right-4 z-50 animate-slide-in`}>
+            <div className={`px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 ${
+              notification.type === 'success' 
+                ? 'bg-green-500 text-white' 
+                : 'bg-red-500 text-white'
+            }`}>
+              {notification.type === 'success' ? (
+                <HiOutlineCheckCircle className="w-5 h-5" />
+              ) : (
+                <HiOutlineXCircle className="w-5 h-5" />
+              )}
+              <p className="text-sm font-medium">{notification.message}</p>
+            </div>
+          </div>
+        )}
         
         {/* Header */}
         <div className="mb-8">
