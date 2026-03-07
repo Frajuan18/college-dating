@@ -1,12 +1,14 @@
 // components/MessageModal.jsx
 import React, { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { messageService } from '../services/messageService';
 import { HiOutlinePaperAirplane, HiOutlineX } from 'react-icons/hi';
 
 const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) => {
   const { isDark } = useTheme();
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
   const suggestedMessages = [
     "Hey! I saw we have similar interests. Want to chat?",
@@ -20,16 +22,40 @@ const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) =>
   ];
 
   const handleSend = async () => {
-    if (!messageText.trim()) return;
-    
+    if (!messageText.trim()) {
+      setError('Please enter a message');
+      return;
+    }
+
     setSending(true);
+    setError('');
+
     try {
-      await onSendMessage(match.id, messageText);
-      setMessageText('');
-      onClose();
-    } catch (error) {
-      console.error('Error sending message:', error);
-      alert('Failed to send message. Please try again.');
+      // Use the message service to send the message
+      const result = await messageService.sendMessage(
+        currentUser.id,
+        match.id,
+        messageText.trim()
+      );
+
+      if (result.success) {
+        // Call the parent component's onSendMessage callback
+        if (onSendMessage) {
+          await onSendMessage(match.id, messageText.trim());
+        }
+        
+        // Show success (you can add a toast here)
+        console.log('Message sent successfully!');
+        
+        // Close modal
+        setMessageText('');
+        onClose();
+      } else {
+        setError(result.error || 'Failed to send message');
+      }
+    } catch (err) {
+      console.error('Error in handleSend:', err);
+      setError('An unexpected error occurred');
     } finally {
       setSending(false);
     }
@@ -37,10 +63,10 @@ const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) =>
 
   const handleSuggestMessage = (suggestion) => {
     setMessageText(suggestion);
+    setError(''); // Clear any error when user selects a suggestion
   };
 
   const handleOverlayClick = (e) => {
-    // Only close if clicking the overlay itself, not its children
     if (e.target === e.currentTarget) {
       onClose();
     }
@@ -50,12 +76,12 @@ const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) =>
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
       onClick={handleOverlayClick}
     >
       <div 
-        className={`w-full max-w-lg mx-4 rounded-xl shadow-2xl ${
+        className={`w-full max-w-lg rounded-xl shadow-2xl ${
           isDark ? 'bg-gray-800' : 'bg-white'
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -66,22 +92,20 @@ const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) =>
         }`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full overflow-hidden ${
-                isDark ? 'bg-gray-600' : 'bg-white/20'
-              } ring-2 ring-white/50`}>
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-white/20 ring-2 ring-white/50">
                 {match?.image ? (
                   <img src={match.image} alt={match.name} className="w-full h-full object-cover" />
                 ) : (
-                  <div className={`w-full h-full flex items-center justify-center font-bold text-white`}>
+                  <div className="w-full h-full flex items-center justify-center font-bold text-white">
                     {match?.name?.[0] || 'U'}
                   </div>
                 )}
               </div>
               <div>
-                <h3 className={`text-lg font-semibold text-white`}>
+                <h3 className="text-lg font-semibold text-white">
                   Message {match?.name}
                 </h3>
-                <p className={`text-xs text-white/80`}>
+                <p className="text-xs text-white/80">
                   {match?.university} • {match?.age} years
                 </p>
               </div>
@@ -97,6 +121,13 @@ const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) =>
 
         {/* Body */}
         <div className={`px-6 py-6 ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg">
+              <p className="text-sm text-red-500">{error}</p>
+            </div>
+          )}
+
           {/* Suggested Messages */}
           <div className="mb-6">
             <p className={`text-sm font-semibold mb-3 ${
@@ -130,7 +161,10 @@ const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) =>
             </label>
             <textarea
               value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
+              onChange={(e) => {
+                setMessageText(e.target.value);
+                setError(''); // Clear error when user types
+              }}
               rows="4"
               className={`w-full px-4 py-3 rounded-lg border transition-all resize-none ${
                 isDark 
@@ -184,11 +218,12 @@ const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) =>
           <button
             type="button"
             onClick={onClose}
+            disabled={sending}
             className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
               isDark
                 ? 'bg-gray-600 text-gray-200 hover:bg-gray-500'
                 : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-            }`}
+            } ${sending ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Cancel
           </button>
