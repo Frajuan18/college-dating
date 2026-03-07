@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabaseClient';
 import Navbar from '../components/Navbar';
+import MessageModal from '../components/MessageModal';
 import { 
   HiOutlineChat,
   HiOutlineUser,
@@ -15,7 +16,6 @@ import {
   HiOutlinePaperAirplane,
   HiOutlineCheck,
   HiOutlineX,
-  HiOutlineTrash,
   HiOutlineReply
 } from 'react-icons/hi';
 
@@ -31,6 +31,8 @@ const Notifications = () => {
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [incomingRequests, setIncomingRequests] = useState([]);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState(null);
 
   useEffect(() => {
     checkUserAndFetch();
@@ -82,8 +84,8 @@ const Notifications = () => {
         .from('messages')
         .select(`
           *,
-          sender:sender_id(id, first_name, last_name, full_name, photo_url),
-          receiver:receiver_id(id, first_name, last_name, full_name, photo_url)
+          sender:sender_id(id, first_name, last_name, full_name, photo_url, university_name),
+          receiver:receiver_id(id, first_name, last_name, full_name, photo_url, university_name)
         `)
         .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .order('created_at', { ascending: false });
@@ -249,7 +251,8 @@ const Notifications = () => {
         first_name: request.sender.first_name,
         last_name: request.sender.last_name,
         full_name: request.sender.full_name,
-        photo_url: request.sender.photo_url
+        photo_url: request.sender.photo_url,
+        university_name: request.sender.university_name
       };
 
       const conversationId = [request.sender_id, currentUser.id].sort().join('_');
@@ -293,6 +296,32 @@ const Notifications = () => {
 
     } catch (error) {
       console.error('Error declining request:', error);
+    }
+  };
+
+  const handleSendMessageToMatch = async (receiverId, content) => {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([
+          {
+            sender_id: currentUser.id,
+            receiver_id: receiverId,
+            content: content,
+            status: 'sent',
+            created_at: new Date().toISOString()
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+
+      // Refresh conversations
+      await fetchConversations(currentUser.id);
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message');
     }
   };
 
@@ -377,7 +406,7 @@ const Notifications = () => {
                         {request.sender.full_name || `${request.sender.first_name} ${request.sender.last_name}`}
                       </h3>
                       <p className={`text-sm ${getSubtextStyles()}`}>
-                        {request.content.substring(0, 60)}...
+                        {request.content}
                       </p>
                       <p className={`text-xs mt-1 ${getSubtextStyles()}`}>
                         {formatTime(request.created_at)}
@@ -387,12 +416,14 @@ const Notifications = () => {
                       <button
                         onClick={() => handleAcceptRequest(request)}
                         className="p-2 bg-green-500 text-white rounded-full hover:bg-green-600 transition"
+                        title="Accept"
                       >
                         <HiOutlineCheck className="w-5 h-5" />
                       </button>
                       <button
                         onClick={() => handleDeclineRequest(request)}
                         className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
+                        title="Decline"
                       >
                         <HiOutlineX className="w-5 h-5" />
                       </button>
@@ -481,6 +512,11 @@ const Notifications = () => {
                             {conv.lastMessage.sender_id === currentUser.id ? 'You: ' : ''}
                             {conv.lastMessage.content}
                           </p>
+                          {conv.otherUser.university_name && (
+                            <p className={`text-xs mt-1 ${getSubtextStyles()}`}>
+                              {conv.otherUser.university_name}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -535,18 +571,30 @@ const Notifications = () => {
                                 : 'bg-gray-100 text-gray-800'
                           }`}
                         >
-                          <p className="text-sm">{msg.content}</p>
-                          <p className={`text-xs mt-1 ${
-                            isOwn 
-                              ? 'text-rose-100' 
-                              : isDark ? 'text-gray-400' : 'text-gray-500'
-                          }`}>
-                            {formatTime(msg.created_at)}
-                            {isOwn && msg.status === 'sent' && ' • Sent'}
-                            {isOwn && msg.status === 'read' && ' • Read'}
-                            {isOwn && msg.status === 'accepted' && ' • Accepted'}
-                            {isOwn && msg.status === 'declined' && ' • Declined'}
-                          </p>
+                          <p className="text-sm break-words">{msg.content}</p>
+                          <div className="flex items-center justify-end gap-1 mt-1">
+                            <span className={`text-xs ${
+                              isOwn 
+                                ? 'text-rose-100' 
+                                : isDark ? 'text-gray-400' : 'text-gray-500'
+                            }`}>
+                              {formatTime(msg.created_at)}
+                            </span>
+                            {isOwn && (
+                              <span className={`text-xs ${
+                                msg.status === 'sent' ? 'text-rose-100' :
+                                msg.status === 'read' ? 'text-green-300' :
+                                msg.status === 'accepted' ? 'text-green-300' :
+                                'text-rose-100'
+                              }`}>
+                                •
+                                {msg.status === 'sent' && ' Sent'}
+                                {msg.status === 'read' && ' Read'}
+                                {msg.status === 'accepted' && ' Accepted'}
+                                {msg.status === 'declined' && ' Declined'}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -602,6 +650,20 @@ const Notifications = () => {
           </div>
         </div>
       </div>
+
+      {/* Message Modal */}
+      {showMessageModal && selectedMatch && (
+        <MessageModal
+          isOpen={showMessageModal}
+          onClose={() => {
+            setShowMessageModal(false);
+            setSelectedMatch(null);
+          }}
+          match={selectedMatch}
+          currentUser={currentUser}
+          onSendMessage={handleSendMessageToMatch}
+        />
+      )}
     </div>
   );
 };

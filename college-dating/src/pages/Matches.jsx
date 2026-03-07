@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabaseClient';
 import Navbar from '../components/Navbar';
+import MessageModal from '../components/MessageModal';
 import { 
   HiOutlineHeart, 
   HiOutlineChat,
@@ -19,9 +20,7 @@ import {
   HiOutlineFilter,
   HiOutlineSearch,
   HiOutlineRefresh,
-  HiOutlinePaperAirplane,
-  HiOutlineCheck,
-  HiOutlineX
+  HiOutlinePaperAirplane
 } from 'react-icons/hi';
 
 const Matches = () => {
@@ -42,20 +41,6 @@ const Matches = () => {
   // Message modal state
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
-  const [messageText, setMessageText] = useState('');
-  const [sendingMessage, setSendingMessage] = useState(false);
-
-  // Suggested messages
-  const suggestedMessages = [
-    "Hey! I saw we have similar interests. Want to chat?",
-    "Hi! I'm also studying at the same university. How's your semester going?",
-    "Hey! I noticed you're into the same hobbies. What do you think about...",
-    "Hi there! Your profile caught my attention. Would love to connect!",
-    "Hey! I'm also in the same department. Which classes are you taking?",
-    "Hi! I see we have a high match percentage. Want to get to know each other?",
-    "Hey! Your bio is interesting. Tell me more about yourself!",
-    "Hi! I'm new here and looking to meet new people. How are you?"
-  ];
 
   useEffect(() => {
     checkUserAndFetch();
@@ -245,42 +230,36 @@ const Matches = () => {
   };
 
   // Message functions
-  const handleSendMessage = async () => {
-    if (!selectedMatch || !messageText.trim()) return;
+  const handleOpenMessageModal = (match, e) => {
+    e.stopPropagation(); // Prevent card click
+    setSelectedMatch(match);
+    setShowMessageModal(true);
+  };
 
-    setSendingMessage(true);
-
+  const handleSendMessage = async (receiverId, content) => {
     try {
-      // Create a new conversation/message
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('messages')
         .insert([
           {
             sender_id: currentUser.id,
-            receiver_id: selectedMatch.id,
-            content: messageText,
+            receiver_id: receiverId,
+            content: content,
             status: 'sent',
             created_at: new Date().toISOString()
           }
-        ])
-        .select();
+        ]);
 
       if (error) throw error;
 
-      console.log('Message sent:', data);
-
-      // Update local state
+      // Update local state to show conversation started
       setMatches(prevMatches => 
         prevMatches.map(match => 
-          match.id === selectedMatch.id 
-            ? { ...match, hasConversation: true, conversationId: data[0].id }
+          match.id === receiverId 
+            ? { ...match, hasConversation: true }
             : match
         )
       );
-
-      setShowMessageModal(false);
-      setSelectedMatch(null);
-      setMessageText('');
 
       // Navigate to messages page
       navigate('/messages');
@@ -288,19 +267,7 @@ const Matches = () => {
     } catch (error) {
       console.error('Error sending message:', error);
       alert('Failed to send message. Please try again.');
-    } finally {
-      setSendingMessage(false);
     }
-  };
-
-  const handleOpenMessageModal = (match, e) => {
-    e.stopPropagation(); // Prevent card click
-    setSelectedMatch(match);
-    setShowMessageModal(true);
-  };
-
-  const handleSuggestMessage = (suggestion) => {
-    setMessageText(suggestion);
   };
 
   // Helper functions
@@ -765,6 +732,7 @@ const Matches = () => {
                               ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30' 
                               : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
                           }`}
+                          title="Go to Messages"
                         >
                           <HiOutlineChat className="w-4 h-4" />
                         </button>
@@ -776,6 +744,7 @@ const Matches = () => {
                               ? 'bg-rose-600 text-white hover:bg-rose-700' 
                               : 'bg-rose-500 text-white hover:bg-rose-600'
                           }`}
+                          title="Send Message"
                         >
                           <HiOutlinePaperAirplane className="w-4 h-4" />
                         </button>
@@ -812,94 +781,16 @@ const Matches = () => {
 
       {/* Message Modal */}
       {showMessageModal && selectedMatch && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 transition-opacity" onClick={() => setShowMessageModal(false)}>
-              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-            </div>
-
-            <div className={`inline-block align-bottom rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full ${
-              isDark ? 'bg-gray-800' : 'bg-white'
-            }`}>
-              <div className={`px-4 pt-5 pb-4 sm:p-6 sm:pb-4 ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-                <div className="sm:flex sm:items-start">
-                  <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                    <h3 className={`text-lg leading-6 font-medium ${getTextStyles()}`}>
-                      Send Message to {selectedMatch.name}
-                    </h3>
-                    
-                    {/* Suggested Messages */}
-                    <div className="mt-4">
-                      <p className={`text-sm mb-2 ${getSubtextStyles()}`}>Suggested messages:</p>
-                      <div className="space-y-2">
-                        {suggestedMessages.slice(0, 4).map((suggestion, index) => (
-                          <button
-                            key={index}
-                            onClick={() => handleSuggestMessage(suggestion)}
-                            className={`w-full text-left p-2 rounded-lg text-sm transition ${
-                              isDark 
-                                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            {suggestion}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Message Input */}
-                    <div className="mt-4">
-                      <label className={`block text-sm font-medium mb-2 ${getTextStyles()}`}>
-                        Your Message
-                      </label>
-                      <textarea
-                        value={messageText}
-                        onChange={(e) => setMessageText(e.target.value)}
-                        rows="4"
-                        className={`w-full px-3 py-2 rounded-lg border ${
-                          isDark
-                            ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
-                            : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
-                        }`}
-                        placeholder="Type your message here..."
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className={`px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse ${
-                isDark ? 'bg-gray-900' : 'bg-gray-50'
-              }`}>
-                <button
-                  type="button"
-                  onClick={handleSendMessage}
-                  disabled={sendingMessage || !messageText.trim()}
-                  className={`w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm ${
-                    sendingMessage || !messageText.trim()
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-rose-600 hover:bg-rose-700'
-                  }`}
-                >
-                  {sendingMessage ? 'Sending...' : 'Send Message'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowMessageModal(false)}
-                  className={`mt-3 w-full inline-flex justify-center rounded-lg border px-4 py-2 text-base font-medium sm:mt-0 sm:w-auto sm:text-sm ${
-                    isDark
-                      ? 'border-gray-600 text-gray-300 hover:bg-gray-700'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <MessageModal
+          isOpen={showMessageModal}
+          onClose={() => {
+            setShowMessageModal(false);
+            setSelectedMatch(null);
+          }}
+          match={selectedMatch}
+          currentUser={currentUser}
+          onSendMessage={handleSendMessage}
+        />
       )}
     </div>
   );
