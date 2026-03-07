@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { supabase } from '../lib/supabaseClient';
 import Navbar from '../components/Navbar';
 import { 
   HiOutlineHeart, 
@@ -23,6 +24,7 @@ import {
 const Matches = () => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
+  const [currentUser, setCurrentUser] = useState(null);
   const [matches, setMatches] = useState([]);
   const [filteredMatches, setFilteredMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,205 +36,259 @@ const Matches = () => {
     interests: []
   });
 
-  // Sample user data for matches
   useEffect(() => {
-    // Simulate loading
-    setTimeout(() => {
-      const sampleMatches = [
-        {
-          id: 1,
-          name: 'Emma Watson',
-          age: 24,
-          university: 'Stanford University',
-          department: 'Computer Science',
-          year: '3rd Year',
-          location: 'Palo Alto, CA',
-          image: 'https://images.unsplash.com/photo-1494790108777-406d7f1f3a9f?w=400',
-          interests: ['Photography', 'Hiking', 'Coffee', 'Travel'],
-          matchPercentage: 95,
-          lastActive: '5 min ago',
-          isOnline: true,
-          isNew: true,
-          hasMessage: false,
-          verified: true,
-          gender: 'female',
-          compatibility: {
-            interests: 92,
-            location: 85,
-            university: 100
-          }
-        },
-        {
-          id: 2,
-          name: 'Sophia Chen',
-          age: 22,
-          university: 'UC Berkeley',
-          department: 'Business',
-          year: '2nd Year',
-          location: 'Berkeley, CA',
-          image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400',
-          interests: ['Yoga', 'Reading', 'Art', 'Music'],
-          matchPercentage: 88,
-          lastActive: '2 hours ago',
-          isOnline: false,
-          isNew: true,
-          hasMessage: true,
-          verified: true,
-          gender: 'female',
-          compatibility: {
-            interests: 88,
-            location: 90,
-            university: 75
-          }
-        },
-        {
-          id: 3,
-          name: 'Olivia Martinez',
-          age: 23,
-          university: 'UCLA',
-          department: 'Psychology',
-          year: '4th Year',
-          location: 'Los Angeles, CA',
-          image: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=400',
-          interests: ['Dancing', 'Cooking', 'Movies', 'Fitness'],
-          matchPercentage: 92,
-          lastActive: '1 day ago',
-          isOnline: false,
-          isNew: false,
-          hasMessage: false,
-          verified: true,
-          gender: 'female',
-          compatibility: {
-            interests: 94,
-            location: 80,
-            university: 85
-          }
-        },
-        {
-          id: 4,
-          name: 'Isabella Kim',
-          age: 21,
-          university: 'USC',
-          department: 'Architecture',
-          year: '2nd Year',
-          location: 'Los Angeles, CA',
-          image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
-          interests: ['Design', 'Photography', 'Travel', 'Art'],
-          matchPercentage: 85,
-          lastActive: 'Just now',
-          isOnline: true,
-          isNew: true,
-          hasMessage: false,
-          verified: false,
-          gender: 'female',
-          compatibility: {
-            interests: 82,
-            location: 95,
-            university: 70
-          }
-        },
-        {
-          id: 5,
-          name: 'Mia Thompson',
-          age: 24,
-          university: 'NYU',
-          department: 'Journalism',
-          year: 'Graduate',
-          location: 'New York, NY',
-          image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=400',
-          interests: ['Writing', 'Podcasts', 'Coffee', 'Theater'],
-          matchPercentage: 90,
-          lastActive: '3 hours ago',
-          isOnline: false,
-          isNew: false,
-          hasMessage: true,
-          verified: true,
-          gender: 'female',
-          compatibility: {
-            interests: 91,
-            location: 65,
-            university: 88
-          }
-        },
-        {
-          id: 6,
-          name: 'Charlotte Brown',
-          age: 22,
-          university: 'Columbia University',
-          department: 'Political Science',
-          year: '3rd Year',
-          location: 'New York, NY',
-          image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400',
-          interests: ['Debate', 'Reading', 'Yoga', 'Volunteering'],
-          matchPercentage: 87,
-          lastActive: '6 hours ago',
-          isOnline: false,
-          isNew: false,
-          hasMessage: false,
-          verified: true,
-          gender: 'female',
-          compatibility: {
-            interests: 84,
-            location: 70,
-            university: 92
-          }
-        },
-        {
-          id: 7,
-          name: 'Amelia Davis',
-          age: 23,
-          university: 'University of Chicago',
-          department: 'Economics',
-          year: '4th Year',
-          location: 'Chicago, IL',
-          image: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400',
-          interests: ['Finance', 'Chess', 'Running', 'Music'],
-          matchPercentage: 82,
-          lastActive: '1 day ago',
-          isOnline: false,
-          isNew: false,
-          hasMessage: false,
-          verified: true,
-          gender: 'female',
-          compatibility: {
-            interests: 79,
-            location: 88,
-            university: 75
-          }
-        },
-        {
-          id: 8,
-          name: 'Evelyn Rodriguez',
-          age: 21,
-          university: 'University of Miami',
-          department: 'Marine Biology',
-          year: '2nd Year',
-          location: 'Miami, FL',
-          image: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=400',
-          interests: ['Scuba Diving', 'Beach', 'Photography', 'Animals'],
-          matchPercentage: 94,
-          lastActive: '30 min ago',
-          isOnline: true,
-          isNew: true,
-          hasMessage: true,
-          verified: false,
-          gender: 'female',
-          compatibility: {
-            interests: 96,
-            location: 92,
-            university: 85
-          }
-        }
-      ];
-
-      setMatches(sampleMatches);
-      setFilteredMatches(sampleMatches);
-      setLoading(false);
-    }, 1000);
+    checkUserAndFetch();
   }, []);
+
+  const checkUserAndFetch = async () => {
+    try {
+      const telegramId = localStorage.getItem('telegramId');
+
+      if (!telegramId) {
+        console.log('No user found, redirecting to login');
+        navigate('/login');
+        return;
+      }
+
+      await fetchCurrentUser();
+    } catch (error) {
+      console.error('Error checking user:', error);
+      navigate('/login');
+    }
+  };
+
+  const fetchCurrentUser = async () => {
+    try {
+      const telegramId = localStorage.getItem('telegramId');
+
+      if (!telegramId) {
+        navigate('/login');
+        return;
+      }
+
+      // Fetch current user from users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('telegram_id', parseInt(telegramId))
+        .single();
+
+      if (userError) {
+        console.error('Error fetching user:', userError);
+        if (userError.code === 'PGRST116') {
+          localStorage.removeItem('telegramId');
+          navigate('/login');
+          return;
+        }
+        throw userError;
+      }
+
+      setCurrentUser(userData);
+      
+      // Fetch matches (opposite gender users)
+      await fetchMatches(userData);
+      
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      localStorage.removeItem('telegramId');
+      navigate('/login');
+    }
+  };
+
+  const fetchMatches = async (user) => {
+    try {
+      setLoading(true);
+      
+      // Determine opposite gender
+      const oppositeGender = user.gender === 'male' ? 'female' : 'male';
+
+      console.log(`Fetching ${oppositeGender} users for matches`);
+
+      // Fetch ALL opposite gender users (not just verified)
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          id,
+          telegram_id,
+          first_name,
+          last_name,
+          full_name,
+          gender,
+          photo_url,
+          verification_status,
+          university_name,
+          department,
+          student_year,
+          graduation_year,
+          interests,
+          bio,
+          location,
+          created_at
+        `)
+        .eq('gender', oppositeGender)
+        .neq('telegram_id', user.telegram_id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching matches:', error);
+        throw error;
+      }
+
+      console.log(`Found ${data.length} ${oppositeGender} users`);
+
+      // For each user, fetch their latest verification data to get additional info
+      const usersWithVerification = await Promise.all(
+        data.map(async (userData) => {
+          const { data: verification } = await supabase
+            .from('student_verifications')
+            .select('university_name, department, student_year, full_name, status')
+            .eq('user_id', userData.id)
+            .order('submitted_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          return {
+            ...userData,
+            // Use verification data as fallback
+            university_name: userData.university_name || verification?.university_name || 'University',
+            department: userData.department || verification?.department || '',
+            student_year: userData.student_year || verification?.student_year || '',
+            full_name: userData.full_name || verification?.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'User',
+            verification_status: userData.verification_status || verification?.status || 'pending',
+            hasVerification: !!verification
+          };
+        })
+      );
+
+      // Calculate match percentage and format users
+      const formattedMatches = usersWithVerification.map(match => {
+        const matchPercentage = calculateMatchPercentage(user, match);
+        const isNew = isNewUser(match.created_at);
+        const isOnline = Math.random() > 0.7; // Random online status for demo
+        const hasMessage = Math.random() > 0.8; // Random message status for demo
+        
+        return {
+          id: match.id,
+          name: match.full_name || `${match.first_name || ''} ${match.last_name || ''}`.trim() || 'User',
+          age: calculateAge(match.graduation_year),
+          university: match.university_name || 'University',
+          department: match.department || '',
+          year: match.student_year || '',
+          location: match.location || 'On Campus',
+          image: match.photo_url || (match.gender === 'female' 
+            ? 'https://images.unsplash.com/photo-1494790108777-406d7f1f3a9f?w=400'
+            : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400'),
+          interests: match.interests || ['Student', 'Friendly'],
+          matchPercentage: matchPercentage,
+          lastActive: getLastActive(match.updated_at),
+          isOnline: isOnline,
+          isNew: isNew,
+          hasMessage: hasMessage,
+          verified: match.verification_status === 'verified' || match.verification_status === 'approved',
+          gender: match.gender,
+          compatibility: {
+            interests: calculateInterestCompatibility(user.interests || [], match.interests || []),
+            location: calculateLocationCompatibility(user.location, match.location),
+            university: user.university_name === match.university_name ? 100 : 70
+          }
+        };
+      });
+
+      // Sort by match percentage (highest first)
+      formattedMatches.sort((a, b) => b.matchPercentage - a.matchPercentage);
+
+      setMatches(formattedMatches);
+      setFilteredMatches(formattedMatches);
+      
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+      setMatches([]);
+      setFilteredMatches([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper functions
+  const isNewUser = (createdAt) => {
+    if (!createdAt) return false;
+    const created = new Date(createdAt);
+    const now = new Date();
+    const diffDays = Math.floor((now - created) / (1000 * 60 * 60 * 24));
+    return diffDays < 7;
+  };
+
+  const calculateAge = (graduationYear) => {
+    if (!graduationYear) return 22;
+    const currentYear = new Date().getFullYear();
+    return 22 - (graduationYear - currentYear);
+  };
+
+  const getLastActive = (updatedAt) => {
+    if (!updatedAt) return 'Unknown';
+    
+    const now = new Date();
+    const lastActive = new Date(updatedAt);
+    const diffMinutes = Math.floor((now - lastActive) / (1000 * 60));
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes < 60) return `${diffMinutes} min ago`;
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffDays === 1) return 'Yesterday';
+    return `${diffDays} days ago`;
+  };
+
+  const calculateMatchPercentage = (user, match) => {
+    let percentage = 50; // Base percentage
+    
+    // Interest compatibility (up to 20%)
+    const userInterests = user.interests || [];
+    const matchInterests = match.interests || [];
+    if (userInterests.length > 0 && matchInterests.length > 0) {
+      const commonInterests = userInterests.filter(interest => matchInterests.includes(interest));
+      percentage += (commonInterests.length / Math.max(userInterests.length, matchInterests.length)) * 20;
+    }
+    
+    // University compatibility (up to 15%)
+    if (user.university_name && match.university_name) {
+      if (user.university_name === match.university_name) {
+        percentage += 15;
+      }
+    }
+    
+    // Department compatibility (up to 10%)
+    if (user.department && match.department) {
+      if (user.department === match.department) {
+        percentage += 10;
+      }
+    }
+    
+    // Verification status (up to 5%)
+    if (match.verification_status === 'verified' || match.verification_status === 'approved') {
+      percentage += 5;
+    }
+    
+    return Math.min(Math.round(percentage), 100);
+  };
+
+  const calculateInterestCompatibility = (userInterests, matchInterests) => {
+    if (!userInterests.length || !matchInterests.length) return 50;
+    const common = userInterests.filter(i => matchInterests.includes(i));
+    return Math.round((common.length / Math.max(userInterests.length, matchInterests.length)) * 100);
+  };
+
+  const calculateLocationCompatibility = (userLoc, matchLoc) => {
+    if (!userLoc || !matchLoc) return 70;
+    // Simple location matching - in real app, you'd use coordinates
+    return userLoc === matchLoc ? 95 : 75;
+  };
 
   // Filter matches based on search and filters
   useEffect(() => {
+    if (!matches.length) return;
+    
     let filtered = [...matches];
 
     // Filter by search query
@@ -290,7 +346,8 @@ const Matches = () => {
   const getMatchPercentageColor = (percentage) => {
     if (percentage >= 90) return 'text-green-500';
     if (percentage >= 80) return 'text-yellow-500';
-    return 'text-orange-500';
+    if (percentage >= 70) return 'text-orange-500';
+    return 'text-gray-500';
   };
 
   const getUniqueUniversities = () => {
@@ -353,7 +410,7 @@ const Matches = () => {
                 Your Matches
               </h1>
               <p className={`text-sm sm:text-base ${getSubtextStyles()}`}>
-                {filteredMatches.length} people you might like
+                {filteredMatches.length} {filteredMatches.length === 1 ? 'person' : 'people'} you might like
               </p>
             </div>
             
@@ -437,7 +494,7 @@ const Matches = () => {
                   Interests
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {getUniqueInterests().slice(0, 10).map(interest => (
+                  {getUniqueInterests().slice(0, 15).map(interest => (
                     <button
                       key={interest}
                       onClick={() => handleFilterChange('interest', interest)}
@@ -560,13 +617,15 @@ const Matches = () => {
                   {/* University */}
                   <p className={`text-sm mb-2 flex items-center gap-1 ${getSubtextStyles()}`}>
                     <HiOutlineAcademicCap className="w-4 h-4" />
-                    {match.university} • {match.year}
+                    {match.university} {match.year && `• ${match.year}`}
                   </p>
 
                   {/* Department */}
-                  <p className={`text-xs mb-2 ${getSubtextStyles()}`}>
-                    {match.department}
-                  </p>
+                  {match.department && (
+                    <p className={`text-xs mb-2 ${getSubtextStyles()}`}>
+                      {match.department}
+                    </p>
+                  )}
 
                   {/* Location */}
                   <p className={`text-xs mb-3 flex items-center gap-1 ${getSubtextStyles()}`}>
@@ -639,7 +698,8 @@ const Matches = () => {
                       <div 
                         className={`h-1 rounded-full ${
                           match.matchPercentage >= 90 ? 'bg-green-500' :
-                          match.matchPercentage >= 80 ? 'bg-yellow-500' : 'bg-orange-500'
+                          match.matchPercentage >= 80 ? 'bg-yellow-500' :
+                          match.matchPercentage >= 70 ? 'bg-orange-500' : 'bg-gray-400'
                         }`}
                         style={{ width: `${match.matchPercentage}%` }}
                       ></div>
@@ -651,8 +711,8 @@ const Matches = () => {
           </div>
         )}
 
-        {/* Load More Button */}
-        {filteredMatches.length > 0 && filteredMatches.length < matches.length && (
+        {/* Load More Button - You can implement pagination here */}
+        {filteredMatches.length > 0 && filteredMatches.length >= 12 && (
           <div className="text-center mt-8">
             <button
               className={`px-6 py-3 rounded-xl font-medium transition ${
