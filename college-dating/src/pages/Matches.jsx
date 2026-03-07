@@ -271,9 +271,10 @@ const Matches = () => {
 
   // Message functions
   const handleOpenMessageModal = (match, e) => {
-    e.stopPropagation();
-    setSelectedMatch(match);
-    setShowMessageModal(true);
+    e.stopPropagation(); // Prevent card click
+    console.log("Opening message modal for:", match.name);
+    setSelectedMatch(match); // Set the selected match
+    setShowMessageModal(true); // Show the modal - NO NAVIGATION HERE
   };
 
   // In your Matches.jsx, update the handleSendMessage function:
@@ -282,7 +283,6 @@ const Matches = () => {
     try {
       console.log("Sending message to:", receiverId);
 
-      // Use the message service to send the message
       const result = await messageService.sendMessage(
         currentUser.id,
         receiverId,
@@ -304,8 +304,8 @@ const Matches = () => {
         // Show success message
         alert("Message sent successfully!");
 
-        // Don't navigate away - let the user stay on the matches page
-        // The modal will close automatically from the onClose in MessageModal
+        // The modal will close automatically via onClose in MessageModal
+        // DO NOT NAVIGATE HERE
       } else {
         alert(result.error || "Failed to send message");
       }
@@ -856,37 +856,22 @@ const Matches = () => {
                       <HiOutlineClock className="inline w-3 h-3 mr-1" />
                       {match.lastActive}
                     </p>
-
-                    <div className="flex gap-2">
-                      {match.hasConversation ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate("/messages");
-                          }}
-                          className={`p-2 rounded-full transition ${
-                            isDark
-                              ? "bg-blue-600/20 text-blue-400 hover:bg-blue-600/30"
-                              : "bg-blue-100 text-blue-600 hover:bg-blue-200"
-                          }`}
-                          title="Go to Messages"
-                        >
-                          <HiOutlineChat className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={(e) => handleOpenMessageModal(match, e)}
-                          className={`p-2 rounded-full transition ${
-                            isDark
-                              ? "bg-rose-600 text-white hover:bg-rose-700"
-                              : "bg-rose-500 text-white hover:bg-rose-600"
-                          }`}
-                          title="Send Message"
-                        >
-                          <HiOutlinePaperAirplane className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
+                    // This is the button in your match card - it should ONLY
+                    open the modal
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation(); // VERY IMPORTANT - prevents the card click
+                        handleOpenMessageModal(match, e); // This ONLY opens the modal, no navigation
+                      }}
+                      className={`p-2 rounded-full transition ${
+                        isDark
+                          ? "bg-rose-600 text-white hover:bg-rose-700"
+                          : "bg-rose-500 text-white hover:bg-rose-600"
+                      }`}
+                      title="Send Message"
+                    >
+                      <HiOutlinePaperAirplane className="w-4 h-4" />
+                    </button>
                   </div>
 
                   <div className="mt-4">
