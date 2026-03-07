@@ -1,5 +1,5 @@
 // components/MessageModal.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { HiOutlinePaperAirplane, HiOutlineX } from 'react-icons/hi';
 
@@ -7,6 +7,18 @@ const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) =>
   const { isDark } = useTheme();
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
+
+  // Prevent background scrolling when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
 
   const suggestedMessages = [
     "Hey! I saw we have similar interests. Want to chat?",
@@ -23,30 +35,50 @@ const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) =>
     if (!messageText.trim()) return;
     
     setSending(true);
-    await onSendMessage(match.id, messageText);
-    setSending(false);
-    setMessageText('');
-    onClose();
+    try {
+      await onSendMessage(match.id, messageText);
+      setMessageText('');
+      onClose();
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleSuggestMessage = (suggestion) => {
     setMessageText(suggestion);
   };
 
+  // Stop propagation to prevent modal from closing when clicking inside
+  const handleModalClick = (e) => {
+    e.stopPropagation();
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay - Light */}
-        <div className="fixed inset-0 transition-opacity" onClick={onClose}>
-          <div className="absolute inset-0 bg-black/20"></div>
-        </div>
+    <div 
+      className="fixed inset-0 z-50 overflow-y-auto"
+      onClick={onClose} // Close when clicking overlay
+    >
+      {/* Background overlay */}
+      <div className="fixed inset-0 bg-black/50 transition-opacity"></div>
 
-        {/* Modal panel */}
-        <div className={`inline-block align-bottom rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full ${
-          isDark ? 'bg-gray-800' : 'bg-white'
-        }`}>
+      {/* Modal container - centers the modal */}
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        {/* This element is to center the modal */}
+        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">
+          &#8203;
+        </span>
+
+        {/* Modal panel - Stop propagation here */}
+        <div 
+          className={`inline-block align-bottom rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full ${
+            isDark ? 'bg-gray-800' : 'bg-white'
+          }`}
+          onClick={handleModalClick} // Prevent closing when clicking modal
+        >
           {/* Header */}
           <div className={`px-6 py-4 ${
             isDark ? 'bg-gray-700' : 'bg-gradient-to-r from-rose-500 to-pink-500'
@@ -134,6 +166,7 @@ const MessageModal = ({ isOpen, onClose, match, currentUser, onSendMessage }) =>
                 }`}
                 placeholder="Type your message here..."
                 maxLength="500"
+                autoFocus
               />
               <div className="flex justify-between items-center mt-2">
                 <p className={`text-xs ${
