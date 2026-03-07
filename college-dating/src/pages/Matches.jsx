@@ -280,6 +280,8 @@ const Matches = () => {
 
   const handleSendMessage = async (receiverId, content) => {
     try {
+      console.log("Sending message to:", receiverId);
+
       // Use the message service to send the message
       const result = await messageService.sendMessage(
         currentUser.id,
@@ -302,8 +304,8 @@ const Matches = () => {
         // Show success message
         alert("Message sent successfully!");
 
-        // Navigate to messages page
-        navigate("/notifications");
+        // Don't navigate away - let the user stay on the matches page
+        // The modal will close automatically from the onClose in MessageModal
       } else {
         alert(result.error || "Failed to send message");
       }
