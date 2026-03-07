@@ -12,10 +12,7 @@ import {
   HiOutlineClock,
   HiOutlineSearch,
   HiOutlinePaperAirplane,
-  HiOutlineArrowLeft,
-  HiOutlineCheckCircle,
-  HiOutlineXCircle,
-  HiOutlineCheck
+  HiOutlineArrowLeft
 } from 'react-icons/hi';
 
 const Messages = () => {
@@ -34,7 +31,7 @@ const Messages = () => {
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
 
-  // Auto-scroll to bottom of messages
+  // Auto-scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -47,51 +44,15 @@ const Messages = () => {
     checkUserAndFetch();
   }, []);
 
-  // Check if we have a userId from navigation state (from matches page)
+  // Handle navigation from matches page
   useEffect(() => {
     if (location.state?.userId && conversations.length > 0 && currentUser) {
-      const conversation = conversations.find(c => c.otherUser.id === location.state.userId);
+      const conversation = conversations.find(c => c.otherUserId === location.state.userId);
       if (conversation) {
         handleSelectConversation(conversation);
-      } else {
-        // If no conversation exists yet but we have a userId, create a new conversation
-        fetchUserAndCreateConversation(location.state.userId);
       }
     }
   }, [location.state, conversations, currentUser]);
-
-  const fetchUserAndCreateConversation = async (userId) => {
-    try {
-      // Fetch the user details
-      const { data: userData, error } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, full_name, photo_url, university_name')
-        .eq('id', userId)
-        .single();
-
-      if (error) throw error;
-
-      // Create a temporary conversation object
-      const tempConversation = {
-        id: `temp_${userId}`,
-        otherUser: userData,
-        lastMessage: null,
-        unreadCount: 0,
-        messages: []
-      };
-
-      setSelectedConversation(tempConversation);
-      setMessages([]);
-      
-      // Focus on message input
-      setTimeout(() => {
-        messageInputRef.current?.focus();
-      }, 100);
-      
-    } catch (error) {
-      console.error('Error fetching user:', error);
-    }
-  };
 
   const checkUserAndFetch = async () => {
     try {
@@ -150,38 +111,34 @@ const Messages = () => {
   const handleSelectConversation = async (conversation) => {
     setSelectedConversation(conversation);
     
-    // Fetch full message history between the two users
+    // Fetch messages between current user and selected user
     const result = await messageService.getMessages(
       currentUser.id,
-      conversation.otherUser.id
+      conversation.otherUserId
     );
 
     if (result.success) {
-      // Sort messages by date (oldest first for proper conversation flow)
-      const sortedMessages = result.data.sort((a, b) => 
-        new Date(a.created_at) - new Date(b.created_at)
-      );
+      setMessages(result.data);
       
-      setMessages(sortedMessages);
-      
-      // Mark messages as read if any are unread
+      // Mark unread messages as read
       if (conversation.unreadCount > 0) {
-        const unreadMessages = sortedMessages.filter(
-          msg => msg.receiver_id === currentUser.id && msg.status === 'sent'
+        const unreadMessages = result.data.filter(
+          msg => msg.receiver_id === currentUser.id && !msg.read
         );
         
         for (const msg of unreadMessages) {
           await messageService.markAsRead(msg.id);
         }
         
-        // Update conversations unread count
+        // Update conversations list
         setConversations(prev => prev.map(c => 
-          c.id === conversation.id ? { ...c, unreadCount: 0 } : c
+          c.otherUserId === conversation.otherUserId 
+            ? { ...c, unreadCount: 0 } 
+            : c
         ));
       }
     }
 
-    // Focus on message input
     setTimeout(() => {
       messageInputRef.current?.focus();
     }, 100);
@@ -195,57 +152,33 @@ const Messages = () => {
     try {
       const result = await messageService.sendMessage(
         currentUser.id,
-        selectedConversation.otherUser.id,
+        selectedConversation.otherUserId,
         newMessage.trim()
       );
 
       if (result.success) {
         // Add message to local state
-        const newMsg = {
-          ...result.data,
-          sender: { id: currentUser.id, first_name: currentUser.first_name },
-          receiver: { id: selectedConversation.otherUser.id }
-        };
-        
-        setMessages(prev => [...prev, newMsg]);
+        setMessages(prev => [...prev, result.data]);
         setNewMessage('');
 
         // Update conversations list
         setConversations(prev => {
-          const existingConv = prev.find(c => c.id === selectedConversation.id);
-          
-          if (existingConv) {
-            // Update existing conversation
-            const updated = prev.map(c => 
-              c.id === selectedConversation.id 
-                ? { 
-                    ...c, 
-                    lastMessage: newMsg,
-                    messages: [...c.messages, newMsg]
-                  }
-                : c
-            );
-            return updated.sort((a, b) => 
-              new Date(b.lastMessage.created_at) - new Date(a.lastMessage.created_at)
-            );
-          } else {
-            // Create new conversation
-            const newConversation = {
-              id: [currentUser.id, selectedConversation.otherUser.id].sort().join('_'),
-              otherUser: selectedConversation.otherUser,
-              lastMessage: newMsg,
-              unreadCount: 0,
-              messages: [newMsg]
-            };
-            return [newConversation, ...prev];
-          }
+          const updated = prev.map(c => 
+            c.otherUserId === selectedConversation.otherUserId 
+              ? { 
+                  ...c, 
+                  lastMessage: result.data,
+                  messages: [...c.messages, result.data]
+                }
+              : c
+          );
+          return updated.sort((a, b) => 
+            new Date(b.lastMessage?.created_at || 0) - new Date(a.lastMessage?.created_at || 0)
+          );
         });
-      } else {
-        alert(result.error || 'Failed to send message');
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      alert('Failed to send message');
     } finally {
       setSending(false);
     }
@@ -274,7 +207,6 @@ const Messages = () => {
     if (diffMinutes < 60) return `${diffMinutes} min ago`;
     if (diffHours < 24) return `${diffHours} hours ago`;
     if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
     return date.toLocaleDateString();
   };
 
@@ -298,9 +230,8 @@ const Messages = () => {
   };
 
   const filteredConversations = conversations.filter(conv => 
-    conv.otherUser.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    conv.otherUser.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    conv.otherUser.last_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    conv.otherUser?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    conv.otherUser?.first_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (loading) {
@@ -323,12 +254,10 @@ const Messages = () => {
           Messages
         </h1>
 
-        {/* Messages Layout */}
         <div className={`rounded-xl overflow-hidden border ${getCardStyles()}`}>
           <div className="flex flex-col md:flex-row h-[600px]">
-            {/* Conversations List - Left Side */}
+            {/* Conversations List */}
             <div className={`w-full md:w-80 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'} ${selectedConversation ? 'hidden md:block' : 'block'}`}>
-              {/* Search */}
               <div className="p-4">
                 <div className="relative">
                   <HiOutlineSearch className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${
@@ -348,30 +277,27 @@ const Messages = () => {
                 </div>
               </div>
 
-              {/* Conversations List */}
               <div className="overflow-y-auto h-[calc(600px-73px)]">
                 {filteredConversations.length === 0 ? (
                   <div className={`text-center py-8 ${getSubtextStyles()}`}>
                     <HiOutlineChat className="w-12 h-12 mx-auto mb-2 opacity-50" />
                     <p>No conversations yet</p>
-                    <p className="text-xs mt-2">Go to matches and start chatting!</p>
                   </div>
                 ) : (
                   filteredConversations.map((conv) => (
                     <div
-                      key={conv.id}
+                      key={conv.otherUserId}
                       onClick={() => handleSelectConversation(conv)}
                       className={`p-4 cursor-pointer transition ${
-                        selectedConversation?.id === conv.id
+                        selectedConversation?.otherUserId === conv.otherUserId
                           ? isDark ? 'bg-gray-700' : 'bg-rose-50'
                           : isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        {/* Avatar */}
                         <div className="relative">
                           <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-300">
-                            {conv.otherUser.photo_url ? (
+                            {conv.otherUser?.photo_url ? (
                               <img 
                                 src={conv.otherUser.photo_url} 
                                 alt={conv.otherUser.first_name} 
@@ -379,7 +305,7 @@ const Messages = () => {
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-lg font-bold text-gray-600">
-                                {conv.otherUser.first_name?.[0] || 'U'}
+                                {conv.otherUser?.first_name?.[0] || 'U'}
                               </div>
                             )}
                           </div>
@@ -390,12 +316,11 @@ const Messages = () => {
                           )}
                         </div>
 
-                        {/* Conversation Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start">
                             <h3 className={`font-semibold truncate ${getTextStyles()}`}>
-                              {conv.otherUser.full_name || 
-                               `${conv.otherUser.first_name || ''} ${conv.otherUser.last_name || ''}`.trim() || 
+                              {conv.otherUser?.full_name || 
+                               `${conv.otherUser?.first_name || ''} ${conv.otherUser?.last_name || ''}`.trim() || 
                                'User'}
                             </h3>
                             {conv.lastMessage && (
@@ -405,7 +330,7 @@ const Messages = () => {
                             )}
                           </div>
                           
-                          {conv.otherUser.university_name && (
+                          {conv.otherUser?.university_name && (
                             <p className={`text-xs mb-1 ${getSubtextStyles()}`}>
                               {conv.otherUser.university_name}
                             </p>
@@ -429,13 +354,12 @@ const Messages = () => {
               </div>
             </div>
 
-            {/* Chat Area - Right Side */}
+            {/* Chat Area */}
             <div className={`flex-1 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
               {selectedConversation ? (
                 <>
                   {/* Chat Header */}
                   <div className={`p-4 border-b flex items-center gap-3 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                    {/* Back button for mobile */}
                     <button
                       onClick={handleBack}
                       className="md:hidden p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
@@ -443,9 +367,8 @@ const Messages = () => {
                       <HiOutlineArrowLeft className={`w-5 h-5 ${getTextStyles()}`} />
                     </button>
 
-                    {/* User Info */}
                     <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-300">
-                      {selectedConversation.otherUser.photo_url ? (
+                      {selectedConversation.otherUser?.photo_url ? (
                         <img 
                           src={selectedConversation.otherUser.photo_url} 
                           alt={selectedConversation.otherUser.first_name} 
@@ -453,17 +376,17 @@ const Messages = () => {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-lg font-bold text-gray-600">
-                          {selectedConversation.otherUser.first_name?.[0] || 'U'}
+                          {selectedConversation.otherUser?.first_name?.[0] || 'U'}
                         </div>
                       )}
                     </div>
                     <div>
                       <h3 className={`font-semibold ${getTextStyles()}`}>
-                        {selectedConversation.otherUser.full_name || 
-                         `${selectedConversation.otherUser.first_name || ''} ${selectedConversation.otherUser.last_name || ''}`.trim()}
+                        {selectedConversation.otherUser?.full_name || 
+                         `${selectedConversation.otherUser?.first_name || ''} ${selectedConversation.otherUser?.last_name || ''}`.trim()}
                       </h3>
                       <p className={`text-xs ${getSubtextStyles()}`}>
-                        {selectedConversation.otherUser.university_name || 'University Student'}
+                        {selectedConversation.otherUser?.university_name || 'University Student'}
                       </p>
                     </div>
                   </div>
@@ -476,64 +399,34 @@ const Messages = () => {
                         <p className="text-sm mt-2">Send a message to start the conversation!</p>
                       </div>
                     ) : (
-                      messages.map((msg, index) => {
+                      messages.map((msg) => {
                         const isOwn = msg.sender_id === currentUser?.id;
-                        const showDate = index === 0 || 
-                          new Date(msg.created_at).toDateString() !== new Date(messages[index - 1].created_at).toDateString();
                         
                         return (
-                          <React.Fragment key={msg.id}>
-                            {showDate && (
-                              <div className="flex justify-center">
-                                <span className={`text-xs px-2 py-1 rounded-full ${
-                                  isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
+                          <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                            <div
+                              className={`max-w-[70%] rounded-2xl px-4 py-2 ${
+                                isOwn
+                                  ? isDark
+                                    ? 'bg-rose-600 text-white'
+                                    : 'bg-rose-500 text-white'
+                                  : isDark
+                                    ? 'bg-gray-700 text-gray-200'
+                                    : 'bg-gray-100 text-gray-800'
+                              }`}
+                            >
+                              <p className="text-sm break-words">{msg.content}</p>
+                              <div className="flex justify-end mt-1">
+                                <span className={`text-xs ${
+                                  isOwn 
+                                    ? 'text-rose-100' 
+                                    : isDark ? 'text-gray-400' : 'text-gray-500'
                                 }`}>
-                                  {new Date(msg.created_at).toLocaleDateString(undefined, { 
-                                    weekday: 'long', 
-                                    year: 'numeric', 
-                                    month: 'long', 
-                                    day: 'numeric' 
-                                  })}
+                                  {formatMessageTime(msg.created_at)}
                                 </span>
                               </div>
-                            )}
-                            <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                              <div
-                                className={`max-w-[70%] rounded-2xl px-4 py-2 ${
-                                  isOwn
-                                    ? isDark
-                                      ? 'bg-rose-600 text-white'
-                                      : 'bg-rose-500 text-white'
-                                    : isDark
-                                      ? 'bg-gray-700 text-gray-200'
-                                      : 'bg-gray-100 text-gray-800'
-                                }`}
-                              >
-                                <p className="text-sm break-words">{msg.content}</p>
-                                <div className="flex items-center justify-end gap-1 mt-1">
-                                  <span className={`text-xs ${
-                                    isOwn 
-                                      ? 'text-rose-100' 
-                                      : isDark ? 'text-gray-400' : 'text-gray-500'
-                                  }`}>
-                                    {formatMessageTime(msg.created_at)}
-                                  </span>
-                                  {isOwn && (
-                                    <span className={`text-xs ${
-                                      msg.status === 'sent' ? 'text-rose-100' :
-                                      msg.status === 'read' ? 'text-green-300' :
-                                      msg.status === 'accepted' ? 'text-green-300' :
-                                      'text-rose-100'
-                                    }`}>
-                                      {msg.status === 'sent' && '✓'}
-                                      {msg.status === 'read' && '✓✓'}
-                                      {msg.status === 'accepted' && '✓✓'}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
                             </div>
-                          </React.Fragment>
+                          </div>
                         );
                       })
                     )}

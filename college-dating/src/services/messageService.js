@@ -2,36 +2,10 @@
 import { supabase } from '../lib/supabaseClient';
 
 export const messageService = {
-  // Test database connection
-  async testConnection() {
-    try {
-      console.log('🔍 Testing database connection...');
-      const { error } = await supabase
-        .from('messages')
-        .select('id')
-        .limit(1);
-
-      if (error) {
-        console.error('❌ Connection test failed:', error);
-        return { success: false, error: error.message };
-      }
-
-      console.log('✅ Database connection successful');
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Connection test error:', error);
-      return { success: false, error: error.message };
-    }
-  },
-
   // Send a new message
   async sendMessage(senderId, receiverId, content) {
     try {
-      console.log('📨 Sending message:', { 
-        senderId, 
-        receiverId, 
-        content: content.substring(0, 30) + '...' 
-      });
+      console.log('📨 Sending message:', { senderId, receiverId, content });
 
       // Validate inputs
       if (!senderId || !receiverId || !content) {
@@ -49,7 +23,6 @@ export const messageService = {
             sender_id: senderId,
             receiver_id: receiverId,
             content: content,
-            status: 'sent',
             created_at: new Date().toISOString()
           }
         ])
@@ -58,29 +31,10 @@ export const messageService = {
 
       if (error) {
         console.error('❌ Supabase error:', error);
-        
-        // Handle specific error codes
-        if (error.code === '23503') {
-          return { 
-            success: false, 
-            error: 'User not found. Please check the user IDs.' 
-          };
-        } else if (error.code === '42501') {
-          return { 
-            success: false, 
-            error: 'Permission denied. Please run the SQL to disable RLS.' 
-          };
-        } else if (error.code === '42P01') {
-          return { 
-            success: false, 
-            error: 'Messages table does not exist. Please create it first.' 
-          };
-        } else {
-          return { 
-            success: false, 
-            error: `Database error: ${error.message}` 
-          };
-        }
+        return { 
+          success: false, 
+          error: error.message 
+        };
       }
 
       console.log('✅ Message sent successfully:', data);
@@ -97,9 +51,9 @@ export const messageService = {
   // Get all conversations for a user
   async getConversations(userId) {
     try {
-      console.log('💬 Fetching conversations for user:', userId);
+      console.log('🔍 Fetching conversations for user:', userId);
 
-      // Get all messages for this user
+      // Get all messages where user is sender OR receiver
       const { data: messages, error } = await supabase
         .from('messages')
         .select('*')
@@ -107,33 +61,37 @@ export const messageService = {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching messages:', error);
+        console.error('❌ Error fetching messages:', error);
         throw error;
       }
+
+      console.log(`📨 Found ${messages?.length || 0} total messages`);
 
       if (!messages || messages.length === 0) {
         return { success: true, data: [] };
       }
 
-      // Get all unique user IDs from messages
-      const userIds = new Set();
+      // Get all unique user IDs from messages (excluding current user)
+      const otherUserIds = new Set();
       messages.forEach(msg => {
-        userIds.add(msg.sender_id);
-        userIds.add(msg.receiver_id);
+        if (msg.sender_id !== userId) otherUserIds.add(msg.sender_id);
+        if (msg.receiver_id !== userId) otherUserIds.add(msg.receiver_id);
       });
 
-      // Fetch all users involved
+      console.log('👥 Other user IDs:', Array.from(otherUserIds));
+
+      // Fetch all other users' details
       const { data: users, error: usersError } = await supabase
         .from('users')
         .select('id, first_name, last_name, full_name, photo_url, university_name')
-        .in('id', Array.from(userIds));
+        .in('id', Array.from(otherUserIds));
 
       if (usersError) {
-        console.error('Error fetching users:', usersError);
+        console.error('❌ Error fetching users:', usersError);
         throw usersError;
       }
 
-      // Create a map of user data for easy lookup
+      // Create a map of user data
       const userMap = {};
       if (users) {
         users.forEach(user => {
@@ -141,53 +99,55 @@ export const messageService = {
         });
       }
 
-      // Group messages by conversation
+      // Group messages by the other user
       const conversationMap = new Map();
 
       messages.forEach(msg => {
+        // Determine the other user in this conversation
         const otherUserId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
-        const otherUser = userMap[otherUserId] || { 
-          id: otherUserId,
-          first_name: 'Unknown',
-          last_name: '',
-          full_name: 'Unknown User',
-          photo_url: null,
-          university_name: null
-        };
         
-        const conversationId = [msg.sender_id, msg.receiver_id].sort().join('_');
-        
-        if (!conversationMap.has(conversationId)) {
-          conversationMap.set(conversationId, {
-            id: conversationId,
-            otherUser: otherUser,
-            lastMessage: msg,
-            unreadCount: msg.receiver_id === userId && msg.status === 'sent' ? 1 : 0,
-            messages: [msg]
+        if (!conversationMap.has(otherUserId)) {
+          conversationMap.set(otherUserId, {
+            otherUserId: otherUserId,
+            otherUser: userMap[otherUserId] || {
+              id: otherUserId,
+              first_name: 'Unknown',
+              last_name: '',
+              full_name: 'Unknown User',
+              photo_url: null,
+              university_name: null
+            },
+            messages: [],
+            lastMessage: null,
+            unreadCount: 0
           });
-        } else {
-          const conv = conversationMap.get(conversationId);
-          conv.messages.push(msg);
-          if (msg.receiver_id === userId && msg.status === 'sent') {
-            conv.unreadCount++;
-          }
-          // Keep the latest message as lastMessage
-          if (new Date(msg.created_at) > new Date(conv.lastMessage.created_at)) {
-            conv.lastMessage = msg;
-          }
+        }
+
+        const conversation = conversationMap.get(otherUserId);
+        conversation.messages.push(msg);
+
+        // Count unread messages (received and not read)
+        if (msg.receiver_id === userId && !msg.read) {
+          conversation.unreadCount++;
+        }
+
+        // Track the latest message
+        if (!conversation.lastMessage || 
+            new Date(msg.created_at) > new Date(conversation.lastMessage.created_at)) {
+          conversation.lastMessage = msg;
         }
       });
 
       // Convert map to array and sort by last message time
       const conversations = Array.from(conversationMap.values());
       conversations.sort((a, b) => 
-        new Date(b.lastMessage.created_at) - new Date(a.lastMessage.created_at)
+        new Date(b.lastMessage?.created_at || 0) - new Date(a.lastMessage?.created_at || 0)
       );
 
       console.log(`✅ Found ${conversations.length} conversations`);
       return { success: true, data: conversations };
     } catch (error) {
-      console.error('❌ Error fetching conversations:', error);
+      console.error('❌ Error in getConversations:', error);
       return { 
         success: false, 
         error: error.message || 'Failed to fetch conversations',
@@ -199,7 +159,7 @@ export const messageService = {
   // Get messages between two users
   async getMessages(userId1, userId2) {
     try {
-      console.log('💬 Fetching messages between', userId1, 'and', userId2);
+      console.log('🔍 Fetching messages between', userId1, 'and', userId2);
 
       const { data: messages, error } = await supabase
         .from('messages')
@@ -208,39 +168,14 @@ export const messageService = {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Error fetching messages:', error);
+        console.error('❌ Error fetching messages:', error);
         throw error;
       }
 
-      // Fetch sender and receiver info
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, full_name, photo_url')
-        .in('id', [userId1, userId2]);
-
-      if (usersError) {
-        console.error('Error fetching users:', usersError);
-        throw usersError;
-      }
-
-      const userMap = {};
-      if (users) {
-        users.forEach(user => {
-          userMap[user.id] = user;
-        });
-      }
-
-      // Add user info to messages
-      const messagesWithUsers = messages.map(msg => ({
-        ...msg,
-        sender: userMap[msg.sender_id] || null,
-        receiver: userMap[msg.receiver_id] || null
-      }));
-
-      console.log(`✅ Found ${messages.length} messages`);
-      return { success: true, data: messagesWithUsers };
+      console.log(`✅ Found ${messages?.length || 0} messages`);
+      return { success: true, data: messages || [] };
     } catch (error) {
-      console.error('❌ Error fetching messages:', error);
+      console.error('❌ Error in getMessages:', error);
       return { 
         success: false, 
         error: error.message || 'Failed to fetch messages',
@@ -252,17 +187,17 @@ export const messageService = {
   // Get message requests (unread messages where user is receiver)
   async getMessageRequests(userId) {
     try {
-      console.log('📬 Fetching message requests for user:', userId);
+      console.log('🔍 Fetching message requests for user:', userId);
 
       const { data: messages, error } = await supabase
         .from('messages')
         .select('*')
         .eq('receiver_id', userId)
-        .eq('status', 'sent')
+        .is('read', null)
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching message requests:', error);
+        console.error('❌ Error fetching message requests:', error);
         throw error;
       }
 
@@ -270,7 +205,7 @@ export const messageService = {
         return { success: true, data: [] };
       }
 
-      // Get all sender IDs
+      // Get sender IDs
       const senderIds = messages.map(msg => msg.sender_id);
       
       // Fetch sender info
@@ -280,7 +215,7 @@ export const messageService = {
         .in('id', senderIds);
 
       if (sendersError) {
-        console.error('Error fetching senders:', sendersError);
+        console.error('❌ Error fetching senders:', sendersError);
         throw sendersError;
       }
 
@@ -307,73 +242,11 @@ export const messageService = {
       console.log(`✅ Found ${messages.length} message requests`);
       return { success: true, data: messagesWithSenders };
     } catch (error) {
-      console.error('❌ Error fetching message requests:', error);
+      console.error('❌ Error in getMessageRequests:', error);
       return { 
         success: false, 
         error: error.message || 'Failed to fetch message requests',
         data: [] 
-      };
-    }
-  },
-
-  // Accept a message request
-  async acceptMessage(messageId) {
-    try {
-      console.log('✅ Accepting message:', messageId);
-
-      const { data, error } = await supabase
-        .from('messages')
-        .update({ 
-          status: 'accepted',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', messageId)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error accepting message:', error);
-        throw error;
-      }
-
-      console.log('✅ Message accepted:', data);
-      return { success: true, data };
-    } catch (error) {
-      console.error('❌ Error accepting message:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Failed to accept message' 
-      };
-    }
-  },
-
-  // Decline a message request
-  async declineMessage(messageId) {
-    try {
-      console.log('❌ Declining message:', messageId);
-
-      const { data, error } = await supabase
-        .from('messages')
-        .update({ 
-          status: 'declined',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', messageId)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error declining message:', error);
-        throw error;
-      }
-
-      console.log('✅ Message declined:', data);
-      return { success: true, data };
-    } catch (error) {
-      console.error('❌ Error declining message:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Failed to decline message' 
       };
     }
   },
@@ -385,21 +258,18 @@ export const messageService = {
 
       const { error } = await supabase
         .from('messages')
-        .update({ 
-          status: 'read',
-          updated_at: new Date().toISOString()
-        })
+        .update({ read: true })
         .eq('id', messageId);
 
       if (error) {
-        console.error('Error marking message as read:', error);
+        console.error('❌ Error marking message as read:', error);
         throw error;
       }
 
       console.log('✅ Message marked as read');
       return { success: true };
     } catch (error) {
-      console.error('❌ Error marking message as read:', error);
+      console.error('❌ Error in markAsRead:', error);
       return { 
         success: false, 
         error: error.message || 'Failed to mark message as read' 
@@ -414,76 +284,20 @@ export const messageService = {
         .from('messages')
         .select('*', { count: 'exact', head: true })
         .eq('receiver_id', userId)
-        .eq('status', 'sent');
+        .is('read', null);
 
       if (error) {
-        console.error('Error fetching unread count:', error);
+        console.error('❌ Error fetching unread count:', error);
         throw error;
       }
 
       return { success: true, count: count || 0 };
     } catch (error) {
-      console.error('❌ Error fetching unread count:', error);
+      console.error('❌ Error in getUnreadCount:', error);
       return { 
         success: false, 
         error: error.message || 'Failed to fetch unread count',
         count: 0 
-      };
-    }
-  },
-
-  // Delete a message (optional)
-  async deleteMessage(messageId, userId) {
-    try {
-      console.log('🗑️ Deleting message:', messageId);
-
-      const { error } = await supabase
-        .from('messages')
-        .delete()
-        .eq('id', messageId)
-        .eq('sender_id', userId); // Only sender can delete
-
-      if (error) {
-        console.error('Error deleting message:', error);
-        throw error;
-      }
-
-      console.log('✅ Message deleted');
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Error deleting message:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Failed to delete message' 
-      };
-    }
-  },
-
-  // Get recent messages (last 30 days)
-  async getRecentMessages(userId, limit = 50) {
-    try {
-      console.log('📨 Fetching recent messages for user:', userId);
-
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-      if (error) {
-        console.error('Error fetching recent messages:', error);
-        throw error;
-      }
-
-      return { success: true, data: data || [] };
-    } catch (error) {
-      console.error('❌ Error fetching recent messages:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Failed to fetch recent messages',
-        data: [] 
       };
     }
   }
