@@ -14,7 +14,9 @@ import {
   HiOutlineClock,
   HiOutlineAcademicCap,
   HiOutlineDotsVertical,
-  HiOutlineUser
+  HiOutlineEmojiHappy,
+  HiOutlinePhotograph,
+  HiOutlineMicrophone
 } from 'react-icons/hi';
 
 const Messages = () => {
@@ -120,6 +122,8 @@ const Messages = () => {
     if (!currentUser?.id) return;
 
     const newSubscription = messageService.subscribeToMessages(currentUser.id, async (newMsg) => {
+      console.log('New message received:', newMsg);
+      
       // Refresh conversations list
       const convResult = await messageService.getConversations(currentUser.id);
       if (convResult.success) {
@@ -213,18 +217,48 @@ const Messages = () => {
     }
   };
 
+  // MAIN FUNCTION TO SEND MESSAGES
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedConversation || sending) return;
+    // Validate inputs
+    if (!newMessage.trim()) {
+      alert('Please enter a message');
+      return;
+    }
+    
+    if (!selectedConversation) {
+      alert('No conversation selected');
+      return;
+    }
+    
+    if (!currentUser?.id) {
+      alert('User not logged in');
+      return;
+    }
+    
+    if (sending) {
+      return;
+    }
 
     setSending(true);
+    
     try {
+      console.log('Sending message:', {
+        from: currentUser.id,
+        to: selectedConversation.otherUserId,
+        content: newMessage.trim()
+      });
+      
+      // Call the message service
       const result = await messageService.sendMessage(
         currentUser.id,
         selectedConversation.otherUserId,
         newMessage.trim()
       );
-
+      
+      console.log('Send message result:', result);
+      
       if (result.success) {
+        // Add message to local state
         setMessages(prev => [...prev, result.data]);
         setNewMessage('');
         
@@ -237,18 +271,21 @@ const Messages = () => {
         setTimeout(() => {
           scrollToBottom('smooth');
         }, 100);
-
-        // Update conversations list
+        
+        // Update conversations list to show the latest message
         const convResult = await messageService.getConversations(currentUser.id);
         if (convResult.success) {
           setConversations(convResult.data);
         }
+        
+        console.log('Message sent successfully!');
       } else {
-        alert(result.error || 'Failed to send message');
+        console.error('Send message failed:', result.error);
+        alert(result.error || 'Failed to send message. Please try again.');
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      alert('Failed to send message');
+      alert('Failed to send message. Please check your connection and try again.');
     } finally {
       setSending(false);
     }
@@ -462,7 +499,7 @@ const Messages = () => {
                   {/* Chat Header with Back Button */}
                   <div className={`p-4 border-b flex items-center justify-between ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-white/50'} backdrop-blur-sm flex-shrink-0`}>
                     <div className="flex items-center gap-3">
-                      {/* Back Button - Always visible on mobile, hidden on desktop when no conversation selected */}
+                      {/* Back Button */}
                       <button
                         onClick={handleBackToConversations}
                         className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition md:hidden"
@@ -527,94 +564,101 @@ const Messages = () => {
                       </div>
                     ) : (
                       <>
-                        {/* Date Divider */}
-                        {messages.length > 0 && (
-                          <div className="flex justify-center my-4">
-                            <span className={`px-3 py-1 text-xs rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                              {new Date(messages[0].created_at).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
-                            </span>
-                          </div>
-                        )}
-                        
-                        {messages.map((msg, idx) => {
-                          const isOwn = msg.sender_id === currentUser?.id;
-                          const showDateDivider = idx > 0 && 
-                            new Date(msg.created_at).toDateString() !== new Date(messages[idx - 1].created_at).toDateString();
-                          
-                          return (
-                            <React.Fragment key={msg.id}>
-                              {showDateDivider && (
-                                <div className="flex justify-center my-4">
-                                  <span className={`px-3 py-1 text-xs rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                                    {new Date(msg.created_at).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
-                                  </span>
-                                </div>
-                              )}
-                              
-                              <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
-                                {!isOwn && (
-                                  <div className="flex-shrink-0 mr-2 mt-1">
-                                    <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-rose-500 to-pink-500">
-                                      {selectedConversation.otherUser?.photo_url ? (
-                                        <img 
-                                          src={selectedConversation.otherUser.photo_url} 
-                                          alt="" 
-                                          className="w-full h-full object-cover"
-                                        />
-                                      ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-xs font-bold text-white">
-                                          {selectedConversation.otherUser?.first_name?.[0]?.toUpperCase() || 'U'}
-                                        </div>
-                                      )}
-                                    </div>
+                        {/* Show messages grouped by date */}
+                        {(() => {
+                          let lastDate = null;
+                          return messages.map((msg, idx) => {
+                            const msgDate = new Date(msg.created_at).toDateString();
+                            const showDateDivider = lastDate !== msgDate;
+                            lastDate = msgDate;
+                            const isOwn = msg.sender_id === currentUser?.id;
+                            
+                            return (
+                              <React.Fragment key={msg.id}>
+                                {showDateDivider && (
+                                  <div className="flex justify-center my-4">
+                                    <span className={`px-3 py-1 text-xs rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                                      {new Date(msg.created_at).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+                                    </span>
                                   </div>
                                 )}
                                 
-                                <div className={`max-w-[85%] sm:max-w-[70%] ${!isOwn ? 'mr-2' : ''}`}>
-                                  <div
-                                    className={`rounded-2xl px-4 py-2.5 shadow-sm ${
-                                      isOwn
-                                        ? isDark
-                                          ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white'
-                                          : 'bg-gradient-to-r from-rose-500 to-pink-500 text-white'
-                                        : isDark
-                                          ? 'bg-gray-700 text-gray-200'
-                                          : 'bg-white text-gray-800 border border-gray-200'
-                                    }`}
-                                  >
-                                    <p className="text-sm break-words leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                                  </div>
-                                  <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                                    <span className={`text-xs ${getSubtextStyles()}`}>
-                                      {formatMessageTime(msg.created_at)}
-                                    </span>
-                                    {isOwn && msg.status === 'read' && (
-                                      <HiOutlineCheck className="w-3 h-3 text-green-500" />
-                                    )}
-                                    {isOwn && msg.status === 'sent' && (
-                                      <HiOutlineClock className="w-3 h-3 text-yellow-500" />
-                                    )}
+                                <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
+                                  {!isOwn && (
+                                    <div className="flex-shrink-0 mr-2 mt-1">
+                                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-rose-500 to-pink-500">
+                                        {selectedConversation.otherUser?.photo_url ? (
+                                          <img 
+                                            src={selectedConversation.otherUser.photo_url} 
+                                            alt="" 
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <div className="w-full h-full flex items-center justify-center text-xs font-bold text-white">
+                                            {selectedConversation.otherUser?.first_name?.[0]?.toUpperCase() || 'U'}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  <div className={`max-w-[85%] sm:max-w-[70%] ${!isOwn ? 'mr-2' : ''}`}>
+                                    <div
+                                      className={`rounded-2xl px-4 py-2.5 shadow-sm ${
+                                        isOwn
+                                          ? isDark
+                                            ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white'
+                                            : 'bg-gradient-to-r from-rose-500 to-pink-500 text-white'
+                                          : isDark
+                                            ? 'bg-gray-700 text-gray-200'
+                                            : 'bg-white text-gray-800 border border-gray-200'
+                                      }`}
+                                    >
+                                      <p className="text-sm break-words leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                                    </div>
+                                    <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                                      <span className={`text-xs ${getSubtextStyles()}`}>
+                                        {formatMessageTime(msg.created_at)}
+                                      </span>
+                                      {isOwn && msg.status === 'read' && (
+                                        <HiOutlineCheck className="w-3 h-3 text-green-500" />
+                                      )}
+                                      {isOwn && msg.status === 'sent' && (
+                                        <HiOutlineClock className="w-3 h-3 text-yellow-500" />
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </React.Fragment>
-                          );
-                        })}
+                              </React.Fragment>
+                            );
+                          });
+                        })()}
                         <div ref={messagesEndRef} />
                       </>
                     )}
                   </div>
 
-                  {/* Message Input - Fully Functional and Responsive */}
+                  {/* Message Input - FULLY FUNCTIONAL */}
                   <div className={`p-4 border-t ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-white/50'} backdrop-blur-sm flex-shrink-0`}>
                     <div className="flex gap-2 items-end">
+                      {/* Attachment Buttons */}
+                      <div className="flex gap-1">
+                        <button className={`p-2 rounded-full transition ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}>
+                          <HiOutlineEmojiHappy className={`w-6 h-6 ${getSubtextStyles()}`} />
+                        </button>
+                        <button className={`p-2 rounded-full transition ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}>
+                          <HiOutlinePhotograph className={`w-6 h-6 ${getSubtextStyles()}`} />
+                        </button>
+                      </div>
+                      
+                      {/* Message Input Field */}
                       <div className="flex-1 relative">
                         <textarea
                           ref={messageInputRef}
                           value={newMessage}
                           onChange={(e) => {
                             setNewMessage(e.target.value);
-                            // Auto-resize without scroll
+                            // Auto-resize
                             e.target.style.height = 'auto';
                             const scrollHeight = e.target.scrollHeight;
                             const newHeight = Math.min(scrollHeight, 100);
@@ -634,8 +678,9 @@ const Messages = () => {
                             overflowY: 'auto',
                             scrollbarWidth: 'thin'
                           }}
+                          disabled={sending}
                         />
-                        {/* Character counter (optional) */}
+                        {/* Character Counter */}
                         {newMessage.length > 0 && (
                           <div className={`absolute right-3 bottom-2 text-xs ${getSubtextStyles()}`}>
                             {newMessage.length}/500
@@ -643,6 +688,7 @@ const Messages = () => {
                         )}
                       </div>
                       
+                      {/* Send Button */}
                       <button
                         onClick={handleSendMessage}
                         disabled={sending || !newMessage.trim()}
@@ -663,9 +709,11 @@ const Messages = () => {
                         )}
                       </button>
                     </div>
+                    
+                    {/* Keyboard Shortcut Hint */}
                     <div className={`text-xs mt-2 ${getSubtextStyles()} flex justify-between`}>
-                      <span>Press Enter to send</span>
-                      <span>Shift + Enter for new line</span>
+                      <span>Press <kbd className={`px-1.5 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'} text-xs`}>Enter</kbd> to send</span>
+                      <span><kbd className={`px-1.5 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'} text-xs`}>Shift</kbd> + <kbd className={`px-1.5 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'} text-xs`}>Enter</kbd> for new line</span>
                     </div>
                   </div>
                 </>
@@ -721,11 +769,6 @@ const Messages = () => {
                 <p className={`text-sm flex items-center justify-center gap-1 ${getSubtextStyles()}`}>
                   <HiOutlineAcademicCap className="w-4 h-4" />
                   {selectedConversation.otherUser.university_name}
-                </p>
-              )}
-              {selectedConversation.otherUser?.department && (
-                <p className={`text-xs mt-1 ${getSubtextStyles()}`}>
-                  {selectedConversation.otherUser.department}
                 </p>
               )}
               
@@ -786,7 +829,7 @@ const styles = `
   animation: scaleIn 0.2s ease-out;
 }
 
-/* Custom scrollbar styling */
+/* Custom scrollbar */
 .overflow-y-auto::-webkit-scrollbar {
   width: 6px;
 }
@@ -808,10 +851,6 @@ const styles = `
   background: rgba(75, 85, 99, 0.5);
 }
 
-.dark .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: rgba(75, 85, 99, 0.7);
-}
-
 /* Textarea scrollbar */
 textarea::-webkit-scrollbar {
   width: 4px;
@@ -824,6 +863,15 @@ textarea::-webkit-scrollbar-track {
 textarea::-webkit-scrollbar-thumb {
   background: rgba(156, 163, 175, 0.3);
   border-radius: 10px;
+}
+
+/* KBD styling */
+kbd {
+  font-family: monospace;
+  font-size: 0.75rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  background: rgba(156, 163, 175, 0.2);
 }
 `;
 
