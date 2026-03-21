@@ -5,7 +5,12 @@ import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabaseClient';
 import { messageService } from '../services/messageService';
 import Navbar from '../components/Navbar';
-import { HiOutlineChat } from 'react-icons/hi';
+import { 
+  HiOutlineChat, 
+  HiOutlineArrowLeft, 
+  HiOutlineChevronUp,
+  HiOutlineAcademicCap 
+} from 'react-icons/hi';
 
 const Messages = () => {
   const navigate = useNavigate();
@@ -20,14 +25,39 @@ const Messages = () => {
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [subscription, setSubscription] = useState(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
+  const firstMessageRef = useRef(null);
 
   // Scroll to bottom
-  const scrollToBottom = () => {
+  const scrollToBottom = (behavior = 'smooth') => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' });
+    }
+  };
+
+  // Scroll to first message
+  const scrollToFirstMessage = () => {
+    if (firstMessageRef.current && messagesContainerRef.current) {
+      firstMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (messagesContainerRef.current && messages.length > 0) {
+      messagesContainerRef.current.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  // Check scroll position
+  const handleScroll = () => {
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      const atBottom = scrollHeight - scrollTop <= clientHeight + 100;
+      setIsAtBottom(atBottom);
+      setShowScrollButton(scrollTop > 200);
     }
   };
 
@@ -66,13 +96,16 @@ const Messages = () => {
       
       if (selectedConversation && newMsg.sender_id === selectedConversation.otherUserId) {
         setMessages(prev => [...prev, newMsg]);
+        if (isAtBottom) {
+          setTimeout(scrollToBottom, 100);
+        }
         await messageService.markAsRead(newMsg.id);
       }
     });
     
     setSubscription(newSubscription);
     return () => newSubscription.unsubscribe();
-  }, [currentUser?.id, selectedConversation]);
+  }, [currentUser?.id, selectedConversation, isAtBottom]);
 
   const checkUserAndFetch = async () => {
     try {
@@ -138,6 +171,9 @@ const Messages = () => {
       setConversations(prev => prev.map(c => 
         c.otherUserId === conversation.otherUserId ? { ...c, unreadCount: 0 } : c
       ));
+      
+      // Scroll to bottom after loading messages
+      setTimeout(() => scrollToBottom('auto'), 100);
     }
   };
 
@@ -161,7 +197,9 @@ const Messages = () => {
           setConversations(convResult.data);
         }
         
-        setTimeout(scrollToBottom, 100);
+        if (isAtBottom) {
+          setTimeout(scrollToBottom, 100);
+        }
       } else {
         alert(result.error || 'Failed to send message');
       }
@@ -183,6 +221,7 @@ const Messages = () => {
   const handleBack = () => {
     setSelectedConversation(null);
     setMessages([]);
+    setShowScrollButton(false);
   };
 
   const formatTime = (timestamp) => {
@@ -354,42 +393,62 @@ const Messages = () => {
             <div className={`flex-1 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
               {selectedConversation ? (
                 <>
-                  {/* Chat Header */}
-                  <div className={`p-4 border-b flex items-center gap-3 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                    <button
-                      onClick={handleBack}
-                      className="md:hidden p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-                    >
-                      <svg className={`w-5 h-5 ${isDark ? 'text-white' : 'text-gray-900'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
+                  {/* Fixed Chat Header */}
+                  <div className={`sticky top-0 z-10 p-4 border-b flex items-center justify-between ${isDark ? 'border-gray-700 bg-gray-800/95 backdrop-blur-sm' : 'border-gray-200 bg-white/95 backdrop-blur-sm'} shadow-sm`}>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleBack}
+                        className="md:hidden p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+                      >
+                        <HiOutlineArrowLeft className={`w-5 h-5 ${isDark ? 'text-white' : 'text-gray-900'}`} />
+                      </button>
 
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-rose-500 to-pink-500">
-                      {selectedConversation.otherUser?.photo_url ? (
-                        <img 
-                          src={selectedConversation.otherUser.photo_url} 
-                          alt={selectedConversation.otherUser.first_name} 
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white">
-                          {selectedConversation.otherUser?.first_name?.[0]?.toUpperCase() || 'U'}
-                        </div>
-                      )}
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-rose-500 to-pink-500">
+                        {selectedConversation.otherUser?.photo_url ? (
+                          <img 
+                            src={selectedConversation.otherUser.photo_url} 
+                            alt={selectedConversation.otherUser.first_name} 
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white">
+                            {selectedConversation.otherUser?.first_name?.[0]?.toUpperCase() || 'U'}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {selectedConversation.otherUser?.full_name || 
+                           `${selectedConversation.otherUser?.first_name || ''} ${selectedConversation.otherUser?.last_name || ''}`.trim()}
+                        </h3>
+                        {selectedConversation.otherUser?.university_name && (
+                          <p className={`text-xs flex items-center gap-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <HiOutlineAcademicCap className="w-3 h-3" />
+                            {selectedConversation.otherUser.university_name}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {selectedConversation.otherUser?.full_name || 
-                         `${selectedConversation.otherUser?.first_name || ''} ${selectedConversation.otherUser?.last_name || ''}`.trim()}
-                      </h3>
-                    </div>
+                    
+                    {/* Scroll to First Message Button */}
+                    <button
+                      onClick={scrollToFirstMessage}
+                      className={`p-2 rounded-full transition ${
+                        isDark 
+                          ? 'hover:bg-gray-700 text-gray-400 hover:text-white' 
+                          : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
+                      }`}
+                      title="Scroll to first message"
+                    >
+                      <HiOutlineChevronUp className="w-5 h-5" />
+                    </button>
                   </div>
 
                   {/* Messages Container */}
                   <div 
                     ref={messagesContainerRef}
                     className="flex-1 overflow-y-auto p-4 space-y-4"
+                    onScroll={handleScroll}
                   >
                     {messages.length === 0 ? (
                       <div className={`flex flex-col items-center justify-center h-full text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -401,11 +460,12 @@ const Messages = () => {
                       <>
                         {(() => {
                           let lastDate = null;
-                          return messages.map((msg) => {
+                          return messages.map((msg, index) => {
                             const msgDate = getDateGroup(msg.created_at);
                             const showDateDivider = lastDate !== msgDate;
                             lastDate = msgDate;
                             const isOwn = msg.sender_id === currentUser?.id;
+                            const isFirstMessage = index === 0;
                             
                             return (
                               <React.Fragment key={msg.id}>
@@ -417,7 +477,10 @@ const Messages = () => {
                                   </div>
                                 )}
                                 
-                                <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                                <div 
+                                  ref={isFirstMessage ? firstMessageRef : null}
+                                  className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                                >
                                   <div className={`max-w-[70%] rounded-2xl px-4 py-2 ${
                                     isOwn
                                       ? isDark
@@ -427,7 +490,7 @@ const Messages = () => {
                                         ? 'bg-gray-700 text-gray-200'
                                         : 'bg-gray-100 text-gray-800'
                                   }`}>
-                                    <p className="text-sm break-words">{msg.content}</p>
+                                    <p className="text-sm break-words whitespace-pre-wrap">{msg.content}</p>
                                     <div className={`flex justify-end mt-1`}>
                                       <span className={`text-xs ${
                                         isOwn 
@@ -447,6 +510,23 @@ const Messages = () => {
                       </>
                     )}
                   </div>
+
+                  {/* Scroll to Bottom Button (shows when not at bottom) */}
+                  {showScrollButton && !isAtBottom && messages.length > 0 && (
+                    <button
+                      onClick={() => scrollToBottom('smooth')}
+                      className={`absolute bottom-20 right-6 p-3 rounded-full shadow-lg transition transform hover:scale-110 ${
+                        isDark
+                          ? 'bg-rose-600 text-white hover:bg-rose-700'
+                          : 'bg-rose-500 text-white hover:bg-rose-600'
+                      }`}
+                      title="Scroll to latest message"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7-7-7m14-6l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  )}
 
                   {/* Message Input */}
                   <div className={`p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
@@ -486,8 +566,9 @@ const Messages = () => {
                         )}
                       </button>
                     </div>
-                    <div className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Press Enter to send • Shift + Enter for new line
+                    <div className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'} flex justify-between`}>
+                      <span>Press <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-xs">Enter</kbd> to send</span>
+                      <span><kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-xs">Shift</kbd> + <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-xs">Enter</kbd> for new line</span>
                     </div>
                   </div>
                 </>
