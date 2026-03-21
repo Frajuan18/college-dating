@@ -13,7 +13,8 @@ import {
   HiOutlineCheck,
   HiOutlineClock,
   HiOutlineAcademicCap,
-  HiOutlineDotsVertical
+  HiOutlineDotsVertical,
+  HiOutlineUser
 } from 'react-icons/hi';
 
 const Messages = () => {
@@ -35,9 +36,9 @@ const Messages = () => {
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
   const messagesContainerRef = useRef(null);
-  const autoScrollTimeoutRef = useRef(null);
+  const scrollTimeoutRef = useRef(null);
 
-  // Smooth scroll to bottom function
+  // Scroll to bottom function
   const scrollToBottom = (behavior = 'smooth') => {
     if (messagesEndRef.current && !isUserScrolling) {
       messagesEndRef.current.scrollIntoView({ 
@@ -48,23 +49,24 @@ const Messages = () => {
   };
 
   // Check if user is at bottom
-  const isAtBottom = () => {
+  const checkIfAtBottom = () => {
     if (!messagesContainerRef.current) return true;
     const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-    return scrollHeight - scrollTop <= clientHeight + 100;
+    return scrollHeight - scrollTop <= clientHeight + 50;
   };
 
   // Handle scroll events
   const handleScroll = () => {
-    if (autoScrollTimeoutRef.current) {
-      clearTimeout(autoScrollTimeoutRef.current);
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
     }
     
-    if (!isAtBottom()) {
+    const atBottom = checkIfAtBottom();
+    if (!atBottom) {
       setIsUserScrolling(true);
-      autoScrollTimeoutRef.current = setTimeout(() => {
+      scrollTimeoutRef.current = setTimeout(() => {
         setIsUserScrolling(false);
-      }, 3000);
+      }, 2000);
     } else {
       setIsUserScrolling(false);
     }
@@ -72,7 +74,7 @@ const Messages = () => {
 
   // Auto-scroll on new messages
   useEffect(() => {
-    if (!isUserScrolling) {
+    if (!isUserScrolling && messages.length > 0) {
       scrollToBottom('smooth');
     }
   }, [messages]);
@@ -82,9 +84,10 @@ const Messages = () => {
     if (selectedConversation && messageInputRef.current) {
       setTimeout(() => {
         messageInputRef.current.focus();
-        // Reset scroll position
         setIsUserScrolling(false);
-        scrollToBottom('auto');
+        setTimeout(() => {
+          scrollToBottom('auto');
+        }, 100);
       }, 100);
     }
   }, [selectedConversation]);
@@ -96,8 +99,8 @@ const Messages = () => {
       if (subscription) {
         subscription.unsubscribe();
       }
-      if (autoScrollTimeoutRef.current) {
-        clearTimeout(autoScrollTimeoutRef.current);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
       }
     };
   }, []);
@@ -227,8 +230,13 @@ const Messages = () => {
         
         // Reset textarea height
         if (messageInputRef.current) {
-          messageInputRef.current.style.height = 'auto';
+          messageInputRef.current.style.height = '44px';
         }
+        
+        // Scroll to bottom
+        setTimeout(() => {
+          scrollToBottom('smooth');
+        }, 100);
 
         // Update conversations list
         const convResult = await messageService.getConversations(currentUser.id);
@@ -253,13 +261,14 @@ const Messages = () => {
     }
   };
 
-  const handleBack = () => {
+  const handleBackToConversations = () => {
     setSelectedConversation(null);
     setMessages([]);
     setIsUserScrolling(false);
   };
 
   const formatTime = (timestamp) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
     const now = new Date();
     const diffMinutes = Math.floor((now - date) / (1000 * 60));
@@ -274,6 +283,7 @@ const Messages = () => {
   };
 
   const formatMessageTime = (timestamp) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
@@ -335,11 +345,11 @@ const Messages = () => {
         </div>
 
         <div className={`rounded-2xl overflow-hidden shadow-2xl border ${getCardStyles()} backdrop-blur-sm`}>
-          <div className="flex flex-col md:flex-row h-[calc(100vh-180px)] min-h-[500px] max-h-[800px]">
-            {/* Conversations Sidebar - No scroll effect, just natural scroll */}
+          <div className="flex flex-col md:flex-row h-[calc(100vh-200px)] min-h-[500px]">
+            {/* Conversations Sidebar */}
             <div className={`w-full md:w-80 lg:w-96 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'} ${selectedConversation ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}>
               {/* Search Header */}
-              <div className="p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}">
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                 <div className="relative">
                   <HiOutlineSearch className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${getSubtextStyles()}`} />
                   <input
@@ -356,7 +366,7 @@ const Messages = () => {
                 </div>
               </div>
 
-              {/* Conversations List - Natural scrolling */}
+              {/* Conversations List */}
               <div className="flex-1 overflow-y-auto overflow-x-hidden">
                 {filteredConversations.length === 0 ? (
                   <div className={`flex flex-col items-center justify-center h-full p-8 text-center ${getSubtextStyles()}`}>
@@ -449,12 +459,14 @@ const Messages = () => {
             <div className={`flex-1 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
               {selectedConversation ? (
                 <>
-                  {/* Chat Header */}
+                  {/* Chat Header with Back Button */}
                   <div className={`p-4 border-b flex items-center justify-between ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-white/50'} backdrop-blur-sm flex-shrink-0`}>
                     <div className="flex items-center gap-3">
+                      {/* Back Button - Always visible on mobile, hidden on desktop when no conversation selected */}
                       <button
-                        onClick={handleBack}
-                        className="md:hidden p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+                        onClick={handleBackToConversations}
+                        className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition md:hidden"
+                        aria-label="Back to conversations"
                       >
                         <HiOutlineArrowLeft className={`w-5 h-5 ${getTextStyles()}`} />
                       </button>
@@ -469,7 +481,8 @@ const Messages = () => {
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white">
-                              {selectedConversation.otherUser?.first_name?.[0]?.toUpperCase() || 'U'}
+                              {selectedConversation.otherUser?.first_name?.[0]?.toUpperCase() || 
+                               selectedConversation.otherUser?.full_name?.[0]?.toUpperCase() || 'U'}
                             </div>
                           )}
                         </div>
@@ -493,15 +506,15 @@ const Messages = () => {
                     </button>
                   </div>
 
-                  {/* Messages Container - Smooth scrolling, no scrollbar effect */}
+                  {/* Messages Container - SCROLLABLE */}
                   <div 
                     ref={messagesContainerRef}
-                    className="flex-1 overflow-y-auto p-4 space-y-4"
+                    className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4"
                     onScroll={handleScroll}
                     style={{
-                      scrollBehavior: 'smooth',
                       overflowY: 'auto',
-                      overflowX: 'hidden'
+                      overflowX: 'hidden',
+                      scrollBehavior: 'smooth'
                     }}
                   >
                     {messages.length === 0 ? (
@@ -592,7 +605,7 @@ const Messages = () => {
                     )}
                   </div>
 
-                  {/* Message Input - No scroll, fixed height */}
+                  {/* Message Input - Fully Functional and Responsive */}
                   <div className={`p-4 border-t ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-white/50'} backdrop-blur-sm flex-shrink-0`}>
                     <div className="flex gap-2 items-end">
                       <div className="flex-1 relative">
@@ -603,10 +616,11 @@ const Messages = () => {
                             setNewMessage(e.target.value);
                             // Auto-resize without scroll
                             e.target.style.height = 'auto';
-                            const newHeight = Math.min(e.target.scrollHeight, 100);
+                            const scrollHeight = e.target.scrollHeight;
+                            const newHeight = Math.min(scrollHeight, 100);
                             e.target.style.height = newHeight + 'px';
                           }}
-                          onKeyPress={handleKeyPress}
+                          onKeyDown={handleKeyPress}
                           placeholder="Type a message..."
                           rows="1"
                           className={`w-full px-4 py-3 rounded-xl border resize-none transition-all focus:outline-none focus:ring-2 focus:ring-rose-500 ${
@@ -621,6 +635,12 @@ const Messages = () => {
                             scrollbarWidth: 'thin'
                           }}
                         />
+                        {/* Character counter (optional) */}
+                        {newMessage.length > 0 && (
+                          <div className={`absolute right-3 bottom-2 text-xs ${getSubtextStyles()}`}>
+                            {newMessage.length}/500
+                          </div>
+                        )}
                       </div>
                       
                       <button
@@ -632,8 +652,8 @@ const Messages = () => {
                               ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                             : isDark
-                              ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white hover:shadow-lg hover:scale-105'
-                              : 'bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:shadow-lg hover:scale-105'
+                              ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white hover:shadow-lg hover:scale-105 active:scale-95'
+                              : 'bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:shadow-lg hover:scale-105 active:scale-95'
                         }`}
                       >
                         {sending ? (
@@ -642,6 +662,10 @@ const Messages = () => {
                           <HiOutlinePaperAirplane className="w-5 h-5" />
                         )}
                       </button>
+                    </div>
+                    <div className={`text-xs mt-2 ${getSubtextStyles()} flex justify-between`}>
+                      <span>Press Enter to send</span>
+                      <span>Shift + Enter for new line</span>
                     </div>
                   </div>
                 </>
@@ -762,9 +786,9 @@ const styles = `
   animation: scaleIn 0.2s ease-out;
 }
 
-/* Custom scrollbar styling - minimal and clean */
+/* Custom scrollbar styling */
 .overflow-y-auto::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
 }
 
 .overflow-y-auto::-webkit-scrollbar-track {
@@ -788,16 +812,18 @@ const styles = `
   background: rgba(75, 85, 99, 0.7);
 }
 
-/* Hide scrollbar when not hovering */
-.overflow-y-auto {
-  scrollbar-width: thin;
+/* Textarea scrollbar */
+textarea::-webkit-scrollbar {
+  width: 4px;
 }
 
-/* Smooth transitions */
-* {
-  transition-property: background-color, border-color, color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
+textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 10px;
 }
 `;
 
