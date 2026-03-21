@@ -47,7 +47,7 @@ export const messageService = {
    */
   async getConversations(userId) {
     try {
-      // Get all messages where user is involved and status is not declined
+      // Get all messages where user is involved
       const { data: messages, error } = await supabase
         .from('messages')
         .select(`
@@ -56,25 +56,7 @@ export const messageService = {
           status,
           created_at,
           sender_id,
-          receiver_id,
-          sender:users!messages_sender_id_fkey(
-            id, 
-            first_name, 
-            last_name, 
-            full_name, 
-            photo_url, 
-            telegram_id,
-            university_name
-          ),
-          receiver:users!messages_receiver_id_fkey(
-            id, 
-            first_name, 
-            last_name, 
-            full_name, 
-            photo_url, 
-            telegram_id,
-            university_name
-          )
+          receiver_id
         `)
         .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .neq('status', 'declined')
@@ -82,32 +64,80 @@ export const messageService = {
 
       if (error) throw error;
 
+      if (!messages || messages.length === 0) {
+        return { success: true, data: [] };
+      }
+
+      // Get unique user IDs from conversations
+      const userIds = new Set();
+      messages.forEach(msg => {
+        if (msg.sender_id !== userId) userIds.add(msg.sender_id);
+        if (msg.receiver_id !== userId) userIds.add(msg.receiver_id);
+      });
+
+      // Fetch user details for all participants
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, full_name, photo_url, telegram_id')
+        .in('id', Array.from(userIds));
+
+      if (usersError) throw usersError;
+
+      // Create a map of user details
+      const userMap = new Map();
+      users.forEach(user => {
+        userMap.set(user.id, user);
+      });
+
+      // Also fetch verification info for users
+      const { data: verifications, error: verifError } = await supabase
+        .from('student_verifications')
+        .select('user_id, university_name, department, student_year')
+        .in('user_id', Array.from(userIds))
+        .eq('status', 'approved');
+
+      const verificationMap = new Map();
+      if (verifications) {
+        verifications.forEach(verif => {
+          verificationMap.set(verif.user_id, verif);
+        });
+      }
+
       // Group messages by conversation
       const conversationsMap = new Map();
 
       messages.forEach(msg => {
-        const otherUser = msg.sender_id === userId ? msg.receiver : msg.sender;
-        const conversationId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
+        const isSender = msg.sender_id === userId;
+        const otherUserId = isSender ? msg.receiver_id : msg.sender_id;
+        const otherUser = userMap.get(otherUserId);
+        
+        if (!otherUser) return;
 
-        if (!conversationsMap.has(conversationId)) {
-          conversationsMap.set(conversationId, {
-            id: conversationId,
-            otherUserId: conversationId,
-            otherUser: otherUser,
+        // Add university info if available
+        const verification = verificationMap.get(otherUserId);
+        const otherUserWithDetails = {
+          ...otherUser,
+          university_name: verification?.university_name || null,
+          department: verification?.department || null,
+          student_year: verification?.student_year || null,
+          full_name: otherUser.full_name || `${otherUser.first_name || ''} ${otherUser.last_name || ''}`.trim() || 'User'
+        };
+
+        if (!conversationsMap.has(otherUserId)) {
+          conversationsMap.set(otherUserId, {
+            id: otherUserId,
+            otherUserId: otherUserId,
+            otherUser: otherUserWithDetails,
             lastMessage: msg,
             unreadCount: msg.receiver_id === userId && msg.status === 'sent' ? 1 : 0,
             messages: [msg]
           });
         } else {
-          const conv = conversationsMap.get(conversationId);
+          const conv = conversationsMap.get(otherUserId);
           conv.messages.push(msg);
-          
-          // Update unread count
           if (msg.receiver_id === userId && msg.status === 'sent') {
             conv.unreadCount += 1;
           }
-          
-          // Keep latest message as lastMessage
           if (new Date(msg.created_at) > new Date(conv.lastMessage.created_at)) {
             conv.lastMessage = msg;
           }
@@ -150,7 +180,7 @@ export const messageService = {
    */
   async getMessageRequests(userId) {
     try {
-      const { data, error } = await supabase
+      const { data: messages, error } = await supabase
         .from('messages')
         .select(`
           id,
@@ -158,18 +188,7 @@ export const messageService = {
           status,
           created_at,
           sender_id,
-          receiver_id,
-          sender:users!messages_sender_id_fkey(
-            id, 
-            first_name, 
-            last_name, 
-            full_name, 
-            photo_url, 
-            telegram_id, 
-            university_name,
-            department,
-            verification_status
-          )
+          receiver_id
         `)
         .eq('receiver_id', userId)
         .eq('status', 'sent')
@@ -177,7 +196,51 @@ export const messageService = {
 
       if (error) throw error;
 
-      return { success: true, data: data || [] };
+      if (!messages || messages.length === 0) {
+        return { success: true, data: [] };
+      }
+
+      // Get sender details
+      const senderIds = messages.map(msg => msg.sender_id);
+      const { data: senders, error: sendersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, full_name, photo_url, telegram_id')
+        .in('id', senderIds);
+
+      if (sendersError) throw sendersError;
+
+      // Get verification info for senders
+      const { data: verifications, error: verifError } = await supabase
+        .from('student_verifications')
+        .select('user_id, university_name, department, student_year')
+        .in('user_id', senderIds)
+        .eq('status', 'approved');
+
+      const verificationMap = new Map();
+      if (verifications) {
+        verifications.forEach(verif => {
+          verificationMap.set(verif.user_id, verif);
+        });
+      }
+
+      // Create a map of senders
+      const senderMap = new Map();
+      senders.forEach(sender => {
+        const verification = verificationMap.get(sender.id);
+        senderMap.set(sender.id, {
+          ...sender,
+          university_name: verification?.university_name || null,
+          full_name: sender.full_name || `${sender.first_name || ''} ${sender.last_name || ''}`.trim() || 'User'
+        });
+      });
+
+      // Combine messages with sender details
+      const requests = messages.map(msg => ({
+        ...msg,
+        sender: senderMap.get(msg.sender_id)
+      }));
+
+      return { success: true, data: requests };
     } catch (error) {
       console.error('Error fetching message requests:', error);
       return { success: false, error: error.message, data: [] };
@@ -285,8 +348,32 @@ export const messageService = {
           table: 'messages',
           filter: `receiver_id=eq.${userId}`,
         },
-        (payload) => {
-          onNewMessage(payload.new);
+        async (payload) => {
+          const newMessage = payload.new;
+          
+          // Fetch sender details for the notification
+          const { data: sender } = await supabase
+            .from('users')
+            .select('id, first_name, last_name, full_name, photo_url')
+            .eq('id', newMessage.sender_id)
+            .single();
+          
+          // Fetch verification info
+          const { data: verification } = await supabase
+            .from('student_verifications')
+            .select('university_name')
+            .eq('user_id', newMessage.sender_id)
+            .eq('status', 'approved')
+            .single();
+          
+          onNewMessage({
+            ...newMessage,
+            sender: {
+              ...sender,
+              full_name: sender?.full_name || `${sender?.first_name || ''} ${sender?.last_name || ''}`.trim() || 'User',
+              university_name: verification?.university_name
+            }
+          });
         }
       )
       .subscribe();

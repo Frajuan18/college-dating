@@ -14,6 +14,7 @@ import Notifications from './pages/Notifications';
 import Messages from './pages/Messages';
 import ToastNotification from './components/ToastNotification';
 import { supabase } from './lib/supabaseClient';
+import { messageService } from './services/messageService';
 
 // Main App Content with Toast Logic
 const AppContent = () => {
@@ -51,51 +52,30 @@ const AppContent = () => {
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    // Subscribe to new messages
-    const newSubscription = supabase
-      .channel('messages_channel')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `receiver_id=eq.${currentUser.id}`,
-        },
-        async (payload) => {
-          const newMessage = payload.new;
-          
-          // Don't show notification if already on messages page
-          if (location.pathname === '/messages') return;
-          
-          // Fetch sender details
-          const { data: sender } = await supabase
-            .from('users')
-            .select('id, full_name, photo_url, first_name, last_name')
-            .eq('id', newMessage.sender_id)
-            .single();
-          
-          // Show toast notification
-          setToastMessage({
-            ...newMessage,
-            sender: sender || { full_name: 'Someone', photo_url: null }
-          });
-          
-          // Auto-hide toast after 5 seconds
-          setTimeout(() => {
-            setToastMessage(null);
-          }, 5000);
-          
-          // Show browser notification if permitted
-          if (Notification.permission === 'granted') {
-            new Notification('New Message', {
-              body: `${sender?.full_name || 'Someone'} sent: ${newMessage.content.substring(0, 50)}`,
-              icon: sender?.photo_url || '/default-avatar.png',
-            });
-          }
-        }
-      )
-      .subscribe();
+    console.log('Setting up message subscription for user:', currentUser.id);
+
+    const newSubscription = messageService.subscribeToMessages(currentUser.id, (newMessage) => {
+      console.log('New message received:', newMessage);
+      
+      // Don't show notification if already on messages page
+      if (location.pathname === '/messages') return;
+      
+      // Show toast notification
+      setToastMessage(newMessage);
+      
+      // Auto-hide toast after 5 seconds
+      setTimeout(() => {
+        setToastMessage(null);
+      }, 5000);
+      
+      // Show browser notification if permitted
+      if (Notification.permission === 'granted') {
+        new Notification('New Message', {
+          body: `${newMessage.sender?.full_name || 'Someone'} sent: ${newMessage.content.substring(0, 50)}`,
+          icon: newMessage.sender?.photo_url || '/default-avatar.png',
+        });
+      }
+    });
 
     setSubscription(newSubscription);
 

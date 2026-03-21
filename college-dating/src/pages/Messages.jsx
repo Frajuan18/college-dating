@@ -1,4 +1,4 @@
-// pages/Messages.jsx (updated with real-time functionality)
+// pages/Messages.jsx - Debug version
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
@@ -24,6 +24,7 @@ const Messages = () => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [subscription, setSubscription] = useState(null);
@@ -40,9 +41,11 @@ const Messages = () => {
   }, [messages]);
 
   useEffect(() => {
+    console.log('Messages component mounted');
     checkUserAndFetch();
     
     return () => {
+      console.log('Messages component unmounting');
       if (subscription) {
         subscription.unsubscribe();
       }
@@ -52,6 +55,7 @@ const Messages = () => {
   // Handle navigation from matches page
   useEffect(() => {
     if (location.state?.userId && conversations.length > 0 && currentUser) {
+      console.log('Navigated from matches with userId:', location.state.userId);
       const conversation = conversations.find(c => c.otherUserId === location.state.userId);
       if (conversation) {
         handleSelectConversation(conversation);
@@ -61,9 +65,16 @@ const Messages = () => {
 
   // Real-time subscription for new messages
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id) {
+      console.log('No current user, skipping subscription');
+      return;
+    }
 
+    console.log('Setting up real-time subscription for user:', currentUser.id);
+    
     const newSubscription = messageService.subscribeToMessages(currentUser.id, async (newMsg) => {
+      console.log('New message received via subscription:', newMsg);
+      
       // Refresh conversations list
       const convResult = await messageService.getConversations(currentUser.id);
       if (convResult.success) {
@@ -83,6 +94,7 @@ const Messages = () => {
     setSubscription(newSubscription);
     
     return () => {
+      console.log('Cleaning up subscription');
       newSubscription.unsubscribe();
     };
   }, [currentUser?.id, selectedConversation]);
@@ -90,13 +102,18 @@ const Messages = () => {
   const checkUserAndFetch = async () => {
     try {
       const telegramId = localStorage.getItem('telegramId');
+      console.log('Telegram ID from localStorage:', telegramId);
+      
       if (!telegramId) {
+        console.log('No telegramId found, redirecting to login');
         navigate('/login');
         return;
       }
+      
       await fetchCurrentUser();
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error in checkUserAndFetch:', error);
+      setError(error.message);
       navigate('/login');
     }
   };
@@ -104,17 +121,25 @@ const Messages = () => {
   const fetchCurrentUser = async () => {
     try {
       const telegramId = localStorage.getItem('telegramId');
+      console.log('Fetching user with telegram_id:', telegramId);
+      
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
         .eq('telegram_id', parseInt(telegramId))
         .single();
 
-      if (userError) throw userError;
+      if (userError) {
+        console.error('Error fetching user from Supabase:', userError);
+        throw userError;
+      }
+      
+      console.log('Current user fetched:', userData);
       setCurrentUser(userData);
       await fetchConversations(userData.id);
     } catch (error) {
-      console.error('Error fetching user:', error);
+      console.error('Error in fetchCurrentUser:', error);
+      setError(error.message);
       localStorage.removeItem('telegramId');
       navigate('/login');
     } finally {
@@ -124,19 +149,30 @@ const Messages = () => {
 
   const fetchConversations = async (userId) => {
     try {
+      console.log('Fetching conversations for user:', userId);
       const result = await messageService.getConversations(userId);
+      console.log('Conversations result:', result);
+      
       if (result.success) {
+        console.log('Conversations loaded:', result.data.length);
         setConversations(result.data);
+      } else {
+        console.error('Error from messageService:', result.error);
+        setError(result.error);
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error in fetchConversations:', error);
+      setError(error.message);
     }
   };
 
   const handleSelectConversation = async (conversation) => {
+    console.log('Selecting conversation:', conversation);
     setSelectedConversation(conversation);
     
     const result = await messageService.getMessages(currentUser.id, conversation.otherUserId);
+    console.log('Messages result:', result);
+    
     if (result.success) {
       setMessages(result.data);
       
@@ -167,6 +203,7 @@ const Messages = () => {
 
     setSending(true);
     try {
+      console.log('Sending message to:', selectedConversation.otherUserId);
       const result = await messageService.sendMessage(
         currentUser.id,
         selectedConversation.otherUserId,
@@ -174,6 +211,7 @@ const Messages = () => {
       );
 
       if (result.success) {
+        console.log('Message sent successfully:', result.data);
         setMessages(prev => [...prev, result.data]);
         setNewMessage('');
         scrollToBottom();
@@ -184,6 +222,7 @@ const Messages = () => {
           setConversations(convResult.data);
         }
       } else {
+        console.error('Failed to send message:', result.error);
         alert(result.error || 'Failed to send message');
       }
     } catch (error) {
@@ -207,6 +246,7 @@ const Messages = () => {
   };
 
   const formatTime = (timestamp) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
     const now = new Date();
     const diffMinutes = Math.floor((now - date) / (1000 * 60));
@@ -221,6 +261,7 @@ const Messages = () => {
   };
 
   const formatMessageTime = (timestamp) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
@@ -242,12 +283,36 @@ const Messages = () => {
     conv.otherUser?.first_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Show error state
+  if (error) {
+    return (
+      <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <Navbar />
+        <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+          <div className="text-center p-8">
+            <div className="text-red-500 text-xl mb-4">Error Loading Messages</div>
+            <p className={getSubtextStyles()}>{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 bg-rose-500 text-white rounded-lg"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
         <Navbar />
         <div className="flex items-center justify-center h-[calc(100vh-64px)]">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-rose-500"></div>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-rose-500 mx-auto mb-4"></div>
+            <p className={getSubtextStyles()}>Loading messages...</p>
+          </div>
         </div>
       </div>
     );

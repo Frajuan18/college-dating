@@ -7,13 +7,12 @@ import { messageService } from '../services/messageService';
 import Navbar from '../components/Navbar';
 import { 
   HiOutlineMail,
-  HiOutlineUser,
   HiOutlineAcademicCap,
-  HiOutlineClock,
   HiOutlineCheck,
   HiOutlineX,
   HiOutlineChat,
-  HiOutlineBell
+  HiOutlineBell,
+  HiOutlineUser
 } from 'react-icons/hi';
 
 const Notifications = () => {
@@ -23,7 +22,7 @@ const Notifications = () => {
   const [messageRequests, setMessageRequests] = useState([]);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('requests'); // 'requests' or 'conversations'
+  const [activeTab, setActiveTab] = useState('requests');
   const [processingId, setProcessingId] = useState(null);
 
   useEffect(() => {
@@ -33,12 +32,10 @@ const Notifications = () => {
   const checkUserAndFetch = async () => {
     try {
       const telegramId = localStorage.getItem('telegramId');
-
       if (!telegramId) {
         navigate('/login');
         return;
       }
-
       await fetchCurrentUser();
     } catch (error) {
       console.error('Error:', error);
@@ -49,7 +46,6 @@ const Notifications = () => {
   const fetchCurrentUser = async () => {
     try {
       const telegramId = localStorage.getItem('telegramId');
-
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
@@ -57,11 +53,9 @@ const Notifications = () => {
         .single();
 
       if (userError) throw userError;
-
       setCurrentUser(userData);
       await fetchMessageRequests(userData.id);
       await fetchConversations(userData.id);
-      
     } catch (error) {
       console.error('Error fetching user:', error);
       localStorage.removeItem('telegramId');
@@ -95,17 +89,11 @@ const Notifications = () => {
 
   const handleAcceptRequest = async (request) => {
     setProcessingId(request.id);
-    
     try {
       const result = await messageService.acceptMessage(request.id);
-      
       if (result.success) {
-        // Remove from requests
         setMessageRequests(prev => prev.filter(r => r.id !== request.id));
-        
-        // Refresh conversations
         await fetchConversations(currentUser.id);
-        
         alert('Request accepted! You can now reply.');
       } else {
         alert(result.error || 'Failed to accept request');
@@ -119,12 +107,9 @@ const Notifications = () => {
 
   const handleDeclineRequest = async (request) => {
     setProcessingId(request.id);
-    
     try {
       const result = await messageService.declineMessage(request.id);
-      
       if (result.success) {
-        // Remove from requests
         setMessageRequests(prev => prev.filter(r => r.id !== request.id));
         alert('Request declined');
       } else {
@@ -152,9 +137,7 @@ const Notifications = () => {
   };
 
   const getCardStyles = () => {
-    return isDark
-      ? 'bg-gray-800 border-gray-700'
-      : 'bg-white border-gray-100';
+    return isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100';
   };
 
   const getTextStyles = () => {
@@ -181,16 +164,11 @@ const Notifications = () => {
       <Navbar />
       
       <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
-        
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-xl ${
-              isDark ? 'bg-gray-800' : 'bg-white shadow-md'
-            }`}>
-              <HiOutlineBell className={`w-6 h-6 ${
-                isDark ? 'text-rose-400' : 'text-rose-500'
-              }`} />
+            <div className={`p-3 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-white shadow-md'}`}>
+              <HiOutlineBell className={`w-6 h-6 ${isDark ? 'text-rose-400' : 'text-rose-500'}`} />
             </div>
             <div>
               <h1 className={`text-3xl sm:text-4xl font-bold mb-1 ${getTextStyles()}`}>
@@ -262,7 +240,7 @@ const Notifications = () => {
                 >
                   <div className="flex items-start gap-4">
                     {/* Sender Avatar */}
-                    <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-300 flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-rose-500 to-pink-500 flex-shrink-0">
                       {request.sender?.photo_url ? (
                         <img 
                           src={request.sender.photo_url} 
@@ -270,8 +248,8 @@ const Notifications = () => {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-lg font-bold text-gray-600">
-                          {request.sender?.first_name?.[0] || 'U'}
+                        <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white">
+                          {request.sender?.first_name?.[0] || <HiOutlineUser className="w-6 h-6" />}
                         </div>
                       )}
                     </div>
@@ -354,10 +332,10 @@ const Notifications = () => {
                 <div
                   key={conv.id}
                   className={`p-4 rounded-xl cursor-pointer transition hover:shadow-md ${getCardStyles()}`}
-                  onClick={() => {/* Navigate to chat detail */}}
+                  onClick={() => navigate('/messages', { state: { userId: conv.otherUserId } })}
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-300 flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-rose-500 to-pink-500 flex-shrink-0">
                       {conv.otherUser?.photo_url ? (
                         <img 
                           src={conv.otherUser.photo_url} 
@@ -365,8 +343,8 @@ const Notifications = () => {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-lg font-bold text-gray-600">
-                          {conv.otherUser?.first_name?.[0] || 'U'}
+                        <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white">
+                          {conv.otherUser?.first_name?.[0] || <HiOutlineUser className="w-6 h-6" />}
                         </div>
                       )}
                     </div>

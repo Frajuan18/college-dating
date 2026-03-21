@@ -46,6 +46,11 @@ const ToastNotification = ({ message, onClose, onClick }) => {
             <p className="text-sm text-gray-600 dark:text-gray-300">
               {message.content}
             </p>
+            {message.sender?.university_name && (
+              <p className="text-xs text-gray-400 mt-1">
+                {message.sender.university_name}
+              </p>
+            )}
           </div>
           
           <button
