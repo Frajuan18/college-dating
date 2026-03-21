@@ -1,6 +1,6 @@
 // App.jsx
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import CoverPage from './components/CoverPage';
 import Home from './pages/Home';
@@ -12,23 +12,143 @@ import Login from './components/Login';
 import Matches from './pages/Matches';
 import Notifications from './pages/Notifications';
 import Messages from './pages/Messages';
+import ToastNotification from './components/ToastNotification';
+import { supabase } from './lib/supabaseClient';
+
+// Main App Content with Toast Logic
+const AppContent = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [currentUser, setCurrentUser] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [subscription, setSubscription] = useState(null);
+
+  // Fetch current user on mount
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const telegramId = localStorage.getItem('telegramId');
+        if (!telegramId) return;
+
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('telegram_id', parseInt(telegramId))
+          .single();
+
+        if (!error && userData) {
+          setCurrentUser(userData);
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error);
+      }
+    };
+
+    fetchCurrentUser();
+  }, []);
+
+  // Subscribe to new messages when user is logged in
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    // Subscribe to new messages
+    const newSubscription = supabase
+      .channel('messages_channel')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${currentUser.id}`,
+        },
+        async (payload) => {
+          const newMessage = payload.new;
+          
+          // Don't show notification if already on messages page
+          if (location.pathname === '/messages') return;
+          
+          // Fetch sender details
+          const { data: sender } = await supabase
+            .from('users')
+            .select('id, full_name, photo_url, first_name, last_name')
+            .eq('id', newMessage.sender_id)
+            .single();
+          
+          // Show toast notification
+          setToastMessage({
+            ...newMessage,
+            sender: sender || { full_name: 'Someone', photo_url: null }
+          });
+          
+          // Auto-hide toast after 5 seconds
+          setTimeout(() => {
+            setToastMessage(null);
+          }, 5000);
+          
+          // Show browser notification if permitted
+          if (Notification.permission === 'granted') {
+            new Notification('New Message', {
+              body: `${sender?.full_name || 'Someone'} sent: ${newMessage.content.substring(0, 50)}`,
+              icon: sender?.photo_url || '/default-avatar.png',
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    setSubscription(newSubscription);
+
+    // Request notification permission
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    return () => {
+      if (newSubscription) {
+        newSubscription.unsubscribe();
+      }
+    };
+  }, [currentUser?.id, location.pathname]);
+
+  const handleToastClick = () => {
+    if (toastMessage) {
+      navigate('/messages', { state: { userId: toastMessage.sender_id } });
+      setToastMessage(null);
+    }
+  };
+
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={<CoverPage />} />
+        <Route path="/home" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/profile" element={<MyProfile />} />
+        <Route path="/matches" element={<Matches />} />
+        <Route path="/notifications" element={<Notifications />} />
+        <Route path="/messages" element={<Messages />} />
+      </Routes>
+      
+      {toastMessage && (
+        <ToastNotification
+          message={toastMessage}
+          onClose={() => setToastMessage(null)}
+          onClick={handleToastClick}
+        />
+      )}
+    </>
+  );
+};
 
 function App() {
   return (
     <ThemeProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<CoverPage />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/profile" element={<MyProfile />} />
-          <Route path="/matches" element={<Matches />} />
-          <Route path="/notifications" element={<Notifications />} />
-          <Route path="/messages" element={<Messages />} />
-        </Routes>
+        <AppContent />
       </BrowserRouter>
     </ThemeProvider>
   );

@@ -1,4 +1,4 @@
-// pages/Messages.jsx
+// pages/Messages.jsx (updated with real-time functionality)
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
@@ -7,12 +7,11 @@ import { messageService } from '../services/messageService';
 import Navbar from '../components/Navbar';
 import { 
   HiOutlineChat,
-  HiOutlineUser,
-  HiOutlineAcademicCap,
-  HiOutlineClock,
   HiOutlineSearch,
   HiOutlinePaperAirplane,
-  HiOutlineArrowLeft
+  HiOutlineArrowLeft,
+  HiOutlineCheck,
+  HiOutlineClock
 } from 'react-icons/hi';
 
 const Messages = () => {
@@ -27,11 +26,11 @@ const Messages = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [subscription, setSubscription] = useState(null);
   
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
 
-  // Auto-scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -42,6 +41,12 @@ const Messages = () => {
 
   useEffect(() => {
     checkUserAndFetch();
+    
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe();
+      }
+    };
   }, []);
 
   // Handle navigation from matches page
@@ -54,15 +59,41 @@ const Messages = () => {
     }
   }, [location.state, conversations, currentUser]);
 
+  // Real-time subscription for new messages
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const newSubscription = messageService.subscribeToMessages(currentUser.id, async (newMsg) => {
+      // Refresh conversations list
+      const convResult = await messageService.getConversations(currentUser.id);
+      if (convResult.success) {
+        setConversations(convResult.data);
+      }
+      
+      // If this message is for the currently selected conversation
+      if (selectedConversation && newMsg.sender_id === selectedConversation.otherUserId) {
+        setMessages(prev => [...prev, newMsg]);
+        scrollToBottom();
+        
+        // Mark as read
+        await messageService.markAsRead(newMsg.id);
+      }
+    });
+    
+    setSubscription(newSubscription);
+    
+    return () => {
+      newSubscription.unsubscribe();
+    };
+  }, [currentUser?.id, selectedConversation]);
+
   const checkUserAndFetch = async () => {
     try {
       const telegramId = localStorage.getItem('telegramId');
-
       if (!telegramId) {
         navigate('/login');
         return;
       }
-
       await fetchCurrentUser();
     } catch (error) {
       console.error('Error:', error);
@@ -73,7 +104,6 @@ const Messages = () => {
   const fetchCurrentUser = async () => {
     try {
       const telegramId = localStorage.getItem('telegramId');
-
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
@@ -81,10 +111,8 @@ const Messages = () => {
         .single();
 
       if (userError) throw userError;
-
       setCurrentUser(userData);
       await fetchConversations(userData.id);
-      
     } catch (error) {
       console.error('Error fetching user:', error);
       localStorage.removeItem('telegramId');
@@ -97,11 +125,8 @@ const Messages = () => {
   const fetchConversations = async (userId) => {
     try {
       const result = await messageService.getConversations(userId);
-      
       if (result.success) {
         setConversations(result.data);
-      } else {
-        console.error('Error fetching conversations:', result.error);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -111,32 +136,25 @@ const Messages = () => {
   const handleSelectConversation = async (conversation) => {
     setSelectedConversation(conversation);
     
-    // Fetch messages between current user and selected user
-    const result = await messageService.getMessages(
-      currentUser.id,
-      conversation.otherUserId
-    );
-
+    const result = await messageService.getMessages(currentUser.id, conversation.otherUserId);
     if (result.success) {
       setMessages(result.data);
       
       // Mark unread messages as read
-      if (conversation.unreadCount > 0) {
-        const unreadMessages = result.data.filter(
-          msg => msg.receiver_id === currentUser.id && !msg.read
-        );
-        
-        for (const msg of unreadMessages) {
-          await messageService.markAsRead(msg.id);
-        }
-        
-        // Update conversations list
-        setConversations(prev => prev.map(c => 
-          c.otherUserId === conversation.otherUserId 
-            ? { ...c, unreadCount: 0 } 
-            : c
-        ));
+      const unreadMessages = result.data.filter(
+        msg => msg.receiver_id === currentUser.id && msg.status === 'sent'
+      );
+      
+      for (const msg of unreadMessages) {
+        await messageService.markAsRead(msg.id);
       }
+      
+      // Update conversations list to clear unread count
+      setConversations(prev => prev.map(c => 
+        c.otherUserId === conversation.otherUserId 
+          ? { ...c, unreadCount: 0 } 
+          : c
+      ));
     }
 
     setTimeout(() => {
@@ -148,7 +166,6 @@ const Messages = () => {
     if (!newMessage.trim() || !selectedConversation) return;
 
     setSending(true);
-
     try {
       const result = await messageService.sendMessage(
         currentUser.id,
@@ -157,28 +174,21 @@ const Messages = () => {
       );
 
       if (result.success) {
-        // Add message to local state
         setMessages(prev => [...prev, result.data]);
         setNewMessage('');
+        scrollToBottom();
 
         // Update conversations list
-        setConversations(prev => {
-          const updated = prev.map(c => 
-            c.otherUserId === selectedConversation.otherUserId 
-              ? { 
-                  ...c, 
-                  lastMessage: result.data,
-                  messages: [...c.messages, result.data]
-                }
-              : c
-          );
-          return updated.sort((a, b) => 
-            new Date(b.lastMessage?.created_at || 0) - new Date(a.lastMessage?.created_at || 0)
-          );
-        });
+        const convResult = await messageService.getConversations(currentUser.id);
+        if (convResult.success) {
+          setConversations(convResult.data);
+        }
+      } else {
+        alert(result.error || 'Failed to send message');
       }
     } catch (error) {
       console.error('Error sending message:', error);
+      alert('Failed to send message');
     } finally {
       setSending(false);
     }
@@ -205,7 +215,7 @@ const Messages = () => {
 
     if (diffMinutes < 1) return 'Just now';
     if (diffMinutes < 60) return `${diffMinutes} min ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays === 1) return 'Yesterday';
     return date.toLocaleDateString();
   };
@@ -216,9 +226,7 @@ const Messages = () => {
   };
 
   const getCardStyles = () => {
-    return isDark
-      ? 'bg-gray-800 border-gray-700'
-      : 'bg-white border-gray-100';
+    return isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100';
   };
 
   const getTextStyles = () => {
@@ -258,11 +266,9 @@ const Messages = () => {
           <div className="flex flex-col md:flex-row h-[600px]">
             {/* Conversations List */}
             <div className={`w-full md:w-80 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'} ${selectedConversation ? 'hidden md:block' : 'block'}`}>
-              <div className="p-4">
+              <div className="p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}">
                 <div className="relative">
-                  <HiOutlineSearch className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${
-                    isDark ? 'text-gray-500' : 'text-gray-400'
-                  }`} />
+                  <HiOutlineSearch className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
                   <input
                     type="text"
                     placeholder="Search conversations..."
@@ -282,6 +288,7 @@ const Messages = () => {
                   <div className={`text-center py-8 ${getSubtextStyles()}`}>
                     <HiOutlineChat className="w-12 h-12 mx-auto mb-2 opacity-50" />
                     <p>No conversations yet</p>
+                    <p className="text-sm mt-2">Go to matches to start chatting!</p>
                   </div>
                 ) : (
                   filteredConversations.map((conv) => (
@@ -296,7 +303,7 @@ const Messages = () => {
                     >
                       <div className="flex items-center gap-3">
                         <div className="relative">
-                          <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-300">
+                          <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-rose-500 to-pink-500">
                             {conv.otherUser?.photo_url ? (
                               <img 
                                 src={conv.otherUser.photo_url} 
@@ -304,13 +311,13 @@ const Messages = () => {
                                 className="w-full h-full object-cover"
                               />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-lg font-bold text-gray-600">
+                              <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white">
                                 {conv.otherUser?.first_name?.[0] || 'U'}
                               </div>
                             )}
                           </div>
                           {conv.unreadCount > 0 && (
-                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center">
+                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center animate-pulse">
                               {conv.unreadCount}
                             </span>
                           )}
@@ -367,7 +374,7 @@ const Messages = () => {
                       <HiOutlineArrowLeft className={`w-5 h-5 ${getTextStyles()}`} />
                     </button>
 
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-300">
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-rose-500 to-pink-500">
                       {selectedConversation.otherUser?.photo_url ? (
                         <img 
                           src={selectedConversation.otherUser.photo_url} 
@@ -375,7 +382,7 @@ const Messages = () => {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-lg font-bold text-gray-600">
+                        <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white">
                           {selectedConversation.otherUser?.first_name?.[0] || 'U'}
                         </div>
                       )}
@@ -395,12 +402,14 @@ const Messages = () => {
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {messages.length === 0 ? (
                       <div className={`text-center py-8 ${getSubtextStyles()}`}>
+                        <HiOutlineChat className="w-12 h-12 mx-auto mb-2 opacity-50" />
                         <p>No messages yet</p>
                         <p className="text-sm mt-2">Send a message to start the conversation!</p>
                       </div>
                     ) : (
                       messages.map((msg) => {
                         const isOwn = msg.sender_id === currentUser?.id;
+                        const isPending = msg.status === 'sent' && !isOwn;
                         
                         return (
                           <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
@@ -413,10 +422,10 @@ const Messages = () => {
                                   : isDark
                                     ? 'bg-gray-700 text-gray-200'
                                     : 'bg-gray-100 text-gray-800'
-                              }`}
+                              } ${isPending ? 'opacity-70' : ''}`}
                             >
                               <p className="text-sm break-words">{msg.content}</p>
-                              <div className="flex justify-end mt-1">
+                              <div className="flex items-center justify-end gap-1 mt-1">
                                 <span className={`text-xs ${
                                   isOwn 
                                     ? 'text-rose-100' 
@@ -424,6 +433,12 @@ const Messages = () => {
                                 }`}>
                                   {formatMessageTime(msg.created_at)}
                                 </span>
+                                {isPending && (
+                                  <HiOutlineClock className="w-3 h-3 text-yellow-500" />
+                                )}
+                                {isOwn && msg.status === 'read' && (
+                                  <HiOutlineCheck className="w-3 h-3 text-green-400" />
+                                )}
                               </div>
                             </div>
                           </div>
