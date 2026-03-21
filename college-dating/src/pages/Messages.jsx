@@ -5,10 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabaseClient';
 import { messageService } from '../services/messageService';
 import Navbar from '../components/Navbar';
-import ConversationList from '../components/ConversationList';
-import ChatHeader from '../components/ChatHeader';
-import Message from '../components/Message';
-import MessageInput from '../components/MessageInput';
+import { HiOutlineChat } from 'react-icons/hi';
 
 const Messages = () => {
   const navigate = useNavigate();
@@ -18,72 +15,42 @@ const Messages = () => {
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [subscription, setSubscription] = useState(null);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [isUserScrolling, setIsUserScrolling] = useState(false);
   
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
-  const scrollTimeoutRef = useRef(null);
 
   // Scroll to bottom
-  const scrollToBottom = (behavior = 'smooth') => {
-    if (messagesEndRef.current && !isUserScrolling) {
-      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' });
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  // Check if at bottom
-  const checkIfAtBottom = () => {
-    if (!messagesContainerRef.current) return true;
-    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-    return scrollHeight - scrollTop <= clientHeight + 50;
-  };
-
-  // Handle scroll
-  const handleScroll = () => {
-    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-    
-    const atBottom = checkIfAtBottom();
-    if (!atBottom) {
-      setIsUserScrolling(true);
-      scrollTimeoutRef.current = setTimeout(() => setIsUserScrolling(false), 2000);
-    } else {
-      setIsUserScrolling(false);
-    }
-  };
-
-  // Auto-scroll on new messages
   useEffect(() => {
-    if (!isUserScrolling && messages.length > 0) {
-      scrollToBottom('smooth');
-    }
+    scrollToBottom();
   }, [messages]);
 
-  // Focus input on conversation select
-  useEffect(() => {
-    if (selectedConversation) {
-      setIsUserScrolling(false);
-      setTimeout(() => scrollToBottom('auto'), 100);
-    }
-  }, [selectedConversation]);
-
-  // Initial load
   useEffect(() => {
     checkUserAndFetch();
     return () => {
-      if (subscription) subscription.unsubscribe();
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      if (subscription) {
+        subscription.unsubscribe();
+      }
     };
   }, []);
 
-  // Handle navigation from matches
+  // Handle navigation from matches page
   useEffect(() => {
     if (location.state?.userId && conversations.length > 0 && currentUser) {
       const conversation = conversations.find(c => c.otherUserId === location.state.userId);
-      if (conversation) handleSelectConversation(conversation);
+      if (conversation) {
+        handleSelectConversation(conversation);
+      }
     }
   }, [location.state, conversations, currentUser]);
 
@@ -93,7 +60,9 @@ const Messages = () => {
 
     const newSubscription = messageService.subscribeToMessages(currentUser.id, async (newMsg) => {
       const convResult = await messageService.getConversations(currentUser.id);
-      if (convResult.success) setConversations(convResult.data);
+      if (convResult.success) {
+        setConversations(convResult.data);
+      }
       
       if (selectedConversation && newMsg.sender_id === selectedConversation.otherUserId) {
         setMessages(prev => [...prev, newMsg]);
@@ -132,7 +101,7 @@ const Messages = () => {
       setCurrentUser(userData);
       await fetchConversations(userData.id);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching user:', error);
       localStorage.removeItem('telegramId');
       navigate('/login');
     } finally {
@@ -143,7 +112,9 @@ const Messages = () => {
   const fetchConversations = async (userId) => {
     try {
       const result = await messageService.getConversations(userId);
-      if (result.success) setConversations(result.data);
+      if (result.success) {
+        setConversations(result.data);
+      }
     } catch (error) {
       console.error('Error:', error);
     }
@@ -170,29 +141,42 @@ const Messages = () => {
     }
   };
 
-  const handleSendMessage = async (content) => {
-    if (!content || !selectedConversation) return;
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedConversation || sending) return;
 
+    setSending(true);
     try {
       const result = await messageService.sendMessage(
         currentUser.id,
         selectedConversation.otherUserId,
-        content
+        newMessage.trim()
       );
 
       if (result.success) {
         setMessages(prev => [...prev, result.data]);
+        setNewMessage('');
         
         const convResult = await messageService.getConversations(currentUser.id);
-        if (convResult.success) setConversations(convResult.data);
+        if (convResult.success) {
+          setConversations(convResult.data);
+        }
         
-        setTimeout(() => scrollToBottom('smooth'), 100);
+        setTimeout(scrollToBottom, 100);
       } else {
         alert(result.error || 'Failed to send message');
       }
     } catch (error) {
       console.error('Error:', error);
       alert('Failed to send message');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -201,11 +185,33 @@ const Messages = () => {
     setMessages([]);
   };
 
-  const handleViewProfile = () => {
-    setShowProfileModal(true);
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMinutes = Math.floor((now - date) / (1000 * 60));
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes < 60) return `${diffMinutes}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffDays === 1) return 'Yesterday';
+    return date.toLocaleDateString();
   };
 
-  // Format date for grouping messages
+  const formatMessageTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
   const getDateGroup = (timestamp) => {
     const date = new Date(timestamp);
     const today = new Date();
@@ -217,19 +223,19 @@ const Messages = () => {
     return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   };
 
+  const filteredConversations = conversations.filter(conv => 
+    conv.otherUser?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    conv.otherUser?.first_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   if (loading) {
     return (
       <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gradient-to-br from-rose-50 to-pink-50'}`}>
         <Navbar />
         <div className="flex items-center justify-center h-[calc(100vh-64px)]">
           <div className="text-center">
-            <div className="relative">
-              <div className="animate-spin rounded-full h-16 w-16 border-4 border-rose-200 border-t-rose-500 mx-auto mb-4"></div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 bg-rose-500 rounded-full animate-ping opacity-75"></div>
-              </div>
-            </div>
-            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-4`}>Loading your messages...</p>
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-rose-200 border-t-rose-500 mx-auto mb-4"></div>
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading messages...</p>
           </div>
         </div>
       </div>
@@ -237,58 +243,159 @@ const Messages = () => {
   }
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gradient-to-br from-rose-50 via-white to-pink-50'}`}>
+    <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gradient-to-br from-rose-50 to-pink-50'}`}>
       <Navbar />
       
       <div className="pt-20 pb-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-rose-500 to-pink-500 bg-clip-text text-transparent">
-            Messages
-          </h1>
-          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-            {conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}
-          </p>
-        </div>
+        <h1 className={`text-3xl sm:text-4xl font-bold mb-6 bg-gradient-to-r from-rose-500 to-pink-500 bg-clip-text text-transparent`}>
+          Messages
+        </h1>
 
         <div className={`rounded-2xl overflow-hidden shadow-2xl border ${isDark ? 'bg-gray-800/50 border-gray-700' : 'bg-white/80 border-gray-100'} backdrop-blur-sm`}>
-          <div className="flex flex-col md:flex-row h-[calc(100vh-200px)] min-h-[500px]">
+          <div className="flex flex-col md:flex-row h-[70vh] min-h-[500px]">
             {/* Conversations Sidebar */}
-            <div className={`w-full md:w-80 lg:w-96 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'} ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
-              <ConversationList
-                conversations={conversations}
-                selectedConversation={selectedConversation}
-                onSelectConversation={handleSelectConversation}
-                currentUser={currentUser}
-                isDark={isDark}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-              />
+            <div className={`w-full md:w-80 lg:w-96 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'} ${selectedConversation ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}>
+              {/* Search */}
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search conversations..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-rose-500 ${
+                      isDark
+                        ? 'bg-gray-700/50 border-gray-600 text-white placeholder-gray-400'
+                        : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Conversations List */}
+              <div className="flex-1 overflow-y-auto">
+                {filteredConversations.length === 0 ? (
+                  <div className={`flex flex-col items-center justify-center h-full p-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-rose-100 to-pink-100 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center mb-4">
+                      <HiOutlineChat className="w-10 h-10 text-rose-500" />
+                    </div>
+                    <p className="text-lg font-medium mb-2">No conversations yet</p>
+                    <p className="text-sm">Go to matches and start chatting!</p>
+                  </div>
+                ) : (
+                  filteredConversations.map((conv) => (
+                    <div
+                      key={conv.otherUserId}
+                      onClick={() => handleSelectConversation(conv)}
+                      className={`p-4 cursor-pointer transition ${
+                        selectedConversation?.otherUserId === conv.otherUserId
+                          ? isDark 
+                            ? 'bg-gray-700/50 border-l-4 border-rose-500' 
+                            : 'bg-rose-50 border-l-4 border-rose-500'
+                          : isDark 
+                            ? 'hover:bg-gray-700/30 border-l-4 border-transparent' 
+                            : 'hover:bg-rose-50/50 border-l-4 border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-shrink-0">
+                          <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-rose-500 to-pink-500">
+                            {conv.otherUser?.photo_url ? (
+                              <img 
+                                src={conv.otherUser.photo_url} 
+                                alt={conv.otherUser.first_name} 
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white">
+                                {conv.otherUser?.first_name?.[0]?.toUpperCase() || 'U'}
+                              </div>
+                            )}
+                          </div>
+                          {conv.unreadCount > 0 && (
+                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center">
+                              {conv.unreadCount}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start">
+                            <h3 className={`font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                              {conv.otherUser?.full_name || 
+                               `${conv.otherUser?.first_name || ''} ${conv.otherUser?.last_name || ''}`.trim() || 'User'}
+                            </h3>
+                            {conv.lastMessage && (
+                              <span className={`text-xs ml-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {formatTime(conv.lastMessage.created_at)}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {conv.lastMessage && (
+                            <p className={`text-sm truncate ${
+                              conv.unreadCount > 0 
+                                ? isDark ? 'text-white font-medium' : 'text-gray-900 font-medium'
+                                : isDark ? 'text-gray-400' : 'text-gray-500'
+                            }`}>
+                              {conv.lastMessage.sender_id === currentUser?.id ? 'You: ' : ''}
+                              {conv.lastMessage.content}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Chat Area */}
             <div className={`flex-1 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
               {selectedConversation ? (
                 <>
-                  <ChatHeader
-                    conversation={selectedConversation}
-                    onBack={handleBack}
-                    onViewProfile={handleViewProfile}
-                    isDark={isDark}
-                  />
+                  {/* Chat Header */}
+                  <div className={`p-4 border-b flex items-center gap-3 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                    <button
+                      onClick={handleBack}
+                      className="md:hidden p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+                    >
+                      <svg className={`w-5 h-5 ${isDark ? 'text-white' : 'text-gray-900'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-rose-500 to-pink-500">
+                      {selectedConversation.otherUser?.photo_url ? (
+                        <img 
+                          src={selectedConversation.otherUser.photo_url} 
+                          alt={selectedConversation.otherUser.first_name} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white">
+                          {selectedConversation.otherUser?.first_name?.[0]?.toUpperCase() || 'U'}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {selectedConversation.otherUser?.full_name || 
+                         `${selectedConversation.otherUser?.first_name || ''} ${selectedConversation.otherUser?.last_name || ''}`.trim()}
+                      </h3>
+                    </div>
+                  </div>
 
                   {/* Messages Container */}
                   <div 
                     ref={messagesContainerRef}
                     className="flex-1 overflow-y-auto p-4 space-y-4"
-                    onScroll={handleScroll}
                   >
                     {messages.length === 0 ? (
                       <div className={`flex flex-col items-center justify-center h-full text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-rose-100 to-pink-100 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center mb-4">
-                          <HiOutlineChat className="w-12 h-12 text-rose-500" />
-                        </div>
+                        <HiOutlineChat className="w-16 h-16 mx-auto mb-4 opacity-50" />
                         <p className="text-lg font-medium mb-2">No messages yet</p>
-                        <p className="text-sm max-w-xs">Send a message to start the conversation!</p>
+                        <p className="text-sm">Send a message to start the conversation!</p>
                       </div>
                     ) : (
                       <>
@@ -298,6 +405,7 @@ const Messages = () => {
                             const msgDate = getDateGroup(msg.created_at);
                             const showDateDivider = lastDate !== msgDate;
                             lastDate = msgDate;
+                            const isOwn = msg.sender_id === currentUser?.id;
                             
                             return (
                               <React.Fragment key={msg.id}>
@@ -309,12 +417,28 @@ const Messages = () => {
                                   </div>
                                 )}
                                 
-                                <Message
-                                  message={msg}
-                                  isOwn={msg.sender_id === currentUser?.id}
-                                  isDark={isDark}
-                                  otherUser={selectedConversation.otherUser}
-                                />
+                                <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                                  <div className={`max-w-[70%] rounded-2xl px-4 py-2 ${
+                                    isOwn
+                                      ? isDark
+                                        ? 'bg-rose-600 text-white'
+                                        : 'bg-rose-500 text-white'
+                                      : isDark
+                                        ? 'bg-gray-700 text-gray-200'
+                                        : 'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    <p className="text-sm break-words">{msg.content}</p>
+                                    <div className={`flex justify-end mt-1`}>
+                                      <span className={`text-xs ${
+                                        isOwn 
+                                          ? 'text-rose-100' 
+                                          : isDark ? 'text-gray-400' : 'text-gray-500'
+                                      }`}>
+                                        {formatMessageTime(msg.created_at)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
                               </React.Fragment>
                             );
                           });
@@ -324,23 +448,58 @@ const Messages = () => {
                     )}
                   </div>
 
-                  <MessageInput
-                    onSend={handleSendMessage}
-                    disabled={!selectedConversation}
-                    isDark={isDark}
-                  />
+                  {/* Message Input */}
+                  <div className={`p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                    <div className="flex gap-2">
+                      <textarea
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={handleKeyPress}
+                        placeholder="Type a message..."
+                        rows="1"
+                        className={`flex-1 px-4 py-3 rounded-xl border resize-none focus:outline-none focus:ring-2 focus:ring-rose-500 ${
+                          isDark
+                            ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                            : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                        }`}
+                        style={{ minHeight: '44px', maxHeight: '100px' }}
+                      />
+                      <button
+                        onClick={handleSendMessage}
+                        disabled={sending || !newMessage.trim()}
+                        className={`p-3 rounded-xl transition ${
+                          sending || !newMessage.trim()
+                            ? isDark
+                              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : isDark
+                              ? 'bg-rose-600 text-white hover:bg-rose-700'
+                              : 'bg-rose-500 text-white hover:bg-rose-600'
+                        }`}
+                      >
+                        {sending ? (
+                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                        ) : (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    <div className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Press Enter to send • Shift + Enter for new line
+                    </div>
+                  </div>
                 </>
               ) : (
                 <div className="flex-1 flex items-center justify-center">
                   <div className="text-center p-8">
-                    <div className="w-32 h-32 rounded-full bg-gradient-to-br from-rose-100 to-pink-100 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center mx-auto mb-6">
-                      <HiOutlineChat className="w-16 h-16 text-rose-500" />
-                    </div>
-                    <h3 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Welcome to Messages
+                    <HiOutlineChat className={`w-16 h-16 mx-auto mb-4 ${isDark ? 'text-gray-400' : 'text-gray-400'}`} />
+                    <h3 className={`text-xl font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      Select a conversation
                     </h3>
-                    <p className={`text-sm max-w-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Select a conversation from the sidebar to start messaging
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Choose a chat from the list to start messaging
                     </p>
                   </div>
                 </div>
@@ -349,145 +508,8 @@ const Messages = () => {
           </div>
         </div>
       </div>
-
-      {/* Profile Modal */}
-      {showProfileModal && selectedConversation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowProfileModal(false)}>
-          <div className={`max-w-md w-full rounded-2xl overflow-hidden shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} animate-scaleIn`} onClick={(e) => e.stopPropagation()}>
-            <div className="relative">
-              <div className="h-48 bg-gradient-to-r from-rose-500 to-pink-500"></div>
-              <div className="absolute -bottom-16 left-1/2 transform -translate-x-1/2">
-                <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white dark:border-gray-800 shadow-xl bg-gradient-to-br from-rose-500 to-pink-500">
-                  {selectedConversation.otherUser?.photo_url ? (
-                    <img 
-                      src={selectedConversation.otherUser.photo_url} 
-                      alt={selectedConversation.otherUser.first_name} 
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl font-bold text-white">
-                      {selectedConversation.otherUser?.first_name?.[0]?.toUpperCase() || 'U'}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            <div className="pt-20 pb-6 px-6 text-center">
-              <h2 className={`text-2xl font-bold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {selectedConversation.otherUser?.full_name || 
-                 `${selectedConversation.otherUser?.first_name || ''} ${selectedConversation.otherUser?.last_name || ''}`.trim()}
-              </h2>
-              {selectedConversation.otherUser?.university_name && (
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {selectedConversation.otherUser.university_name}
-                </p>
-              )}
-              
-              <div className="mt-6 flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowProfileModal(false);
-                    navigate(`/profile/${selectedConversation.otherUserId}`);
-                  }}
-                  className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 text-white font-medium hover:shadow-lg transition"
-                >
-                  View Profile
-                </button>
-                <button
-                  onClick={() => setShowProfileModal(false)}
-                  className={`flex-1 px-4 py-2 rounded-xl border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'} transition`}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
-
-// Add animation styles
-const styles = `
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-out;
-}
-
-.animate-scaleIn {
-  animation: scaleIn 0.2s ease-out;
-}
-
-.overflow-y-auto::-webkit-scrollbar {
-  width: 6px;
-}
-
-.overflow-y-auto::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.overflow-y-auto::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.3);
-  border-radius: 10px;
-}
-
-.overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: rgba(156, 163, 175, 0.5);
-}
-
-.dark .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: rgba(75, 85, 99, 0.5);
-}
-
-textarea::-webkit-scrollbar {
-  width: 4px;
-}
-
-textarea::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-textarea::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.3);
-  border-radius: 10px;
-}
-
-kbd {
-  font-family: monospace;
-  font-size: 0.7rem;
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
-  background: rgba(156, 163, 175, 0.2);
-}
-`;
-
-if (typeof document !== 'undefined') {
-  const styleSheet = document.createElement("style");
-  styleSheet.textContent = styles;
-  document.head.appendChild(styleSheet);
-}
 
 export default Messages;
