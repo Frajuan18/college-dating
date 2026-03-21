@@ -5,3 +5,143 @@
 body {
   font-family: 'Outfit', sans-serif;
 }
+/* Add to your index.css or App.css */
+
+/* Message animations */
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-enter {
+  animation: messageSlideIn 0.3s ease-out;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Smooth transitions */
+* {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #f43f5e 0%, #ec489a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Message bubble hover effect */
+.message-bubble {
+  transition: transform 0.2s ease;
+}
+
+.message-bubble:hover {
+  transform: scale(1.02);
+}
+
+/* Typing indicator */
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  background-color: #94a3b8;
+  border-radius: 50%;
+  animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes typing {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+/* Glass morphism effect */
+.glass {
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark .glass {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+/* Add to your global CSS */
+@keyframes progressShrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+.animate-progress-shrink {
+  animation: progressShrink 5s linear forwards;
+}
+
+/* Message hover effects */
+.message-hover {
+  transition: all 0.2s ease;
+}
+
+.message-hover:hover {
+  transform: translateX(4px);
+}
+
+/* Conversation item active state */
+.conversation-active {
+  background: linear-gradient(90deg, rgba(244, 63, 94, 0.1) 0%, rgba(236, 72, 153, 0.05) 100%);
+  border-left: 3px solid #f43f5e;
+}
